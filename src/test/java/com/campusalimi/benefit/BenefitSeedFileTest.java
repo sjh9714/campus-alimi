@@ -26,7 +26,7 @@ class BenefitSeedFileTest {
     @Test
     void rejectsEntryWithoutSource() {
         BenefitSeed bad = new BenefitSeed("no-source", "이름", "TOOL", "요약", "조건", "방법", null,
-                "출처", "http://insecure.example", LocalDate.of(2026, 10, 26), "규칙", null, null);
+                "출처", "http://insecure.example", LocalDate.of(2026, 10, 26), "규칙", null);
         assertThatThrownBy(() -> BenefitSeedFile.validate(List.of(bad)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("source_url");

@@ -35,11 +35,19 @@ public final class NoticeListParser {
                 continue;
             }
             String category = row.select("td").size() > 1 ? row.select("td").get(1).text().trim() : "";
-            Matcher m = DATE.matcher(row.text());
-            if (!m.find()) {
+            // 제목에도 "<2026.09.04. 업데이트>"처럼 날짜가 들어가므로, 등록일은 제목 뒤쪽 칸에서 찾는다.
+            LocalDate postedOn = null;
+            List<Element> tds = row.select("td");
+            for (int i = tds.size() - 1; i >= 0; i--) {
+                Matcher m = DATE.matcher(tds.get(i).text());
+                if (m.find() && !tds.get(i).hasClass("b-td-title")) {
+                    postedOn = LocalDate.parse(m.group(), FORMAT);
+                    break;
+                }
+            }
+            if (postedOn == null) {
                 continue;
             }
-            LocalDate postedOn = LocalDate.parse(m.group(), FORMAT);
             result.add(new NoticeSummary(articleNo, category, link.text().trim(), postedOn));
         }
         return result;

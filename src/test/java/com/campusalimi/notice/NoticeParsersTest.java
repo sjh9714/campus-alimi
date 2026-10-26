@@ -98,11 +98,57 @@ class NoticeParsersTest {
     }
 
     @Test
-    void leaveDeadlineNoticeIsReadable() {
+    void leaveDeadlineTakesHeaderAsTitleAndTimeAsDeadline() {
         NoticeView v = NoticeViewParser.parse(Fixtures.read("notice-276997.html"));
         List<ExtractedItem> items = DateItemExtractor.extract(v);
-        System.out.println("  body: " + v.bodyText().substring(0, Math.min(300, v.bodyText().length())));
-        items.forEach(i -> System.out.println("  " + i));
-        assertThat(v.title()).contains("휴학");
+        assertThat(items).hasSize(1);
+        ExtractedItem item = items.get(0);
+        assertThat(item.title()).startsWith("일반휴학원 제출 마감일");
+        assertThat(item.range().end()).isEqualTo(LocalDate.of(2026, 10, 23));
+        assertThat(item.range().startsAt()).isNull();
+        assertThat(item.range().endsAt()).isEqualTo(LocalTime.of(17, 30));
+        assertThat(item.naturalKey(276997L)).isEqualTo("notice:276997:table1.r2.c0");
+    }
+
+    @Test
+    void rowWithTwoDateColumnsYieldsOneItemPerColumn() {
+        String body = "<table><tr><td>구분</td><td>신청기간</td><td>결과발표</td></tr>"
+                + "<tr><td>1차 신청</td><td>10.27(화)~10.30(금)</td><td>11.20(금)</td></tr></table>";
+        NoticeView v = new NoticeView(1L, "장학", "[학생지원팀] 테스트 장학 안내", LocalDate.of(2026, 10, 1), "",
+                org.jsoup.Jsoup.parseBodyFragment(body).body(), body, false, List.of());
+        List<ExtractedItem> items = DateItemExtractor.extract(v);
+        assertThat(items).hasSize(2);
+        assertThat(items.get(0).title()).isEqualTo("신청기간 · 1차 신청");
+        assertThat(items.get(0).range().end()).isEqualTo(LocalDate.of(2026, 10, 30));
+        assertThat(items.get(1).title()).isEqualTo("결과발표 · 1차 신청");
+        assertThat(items.get(1).range().end()).isEqualTo(LocalDate.of(2026, 11, 20));
+    }
+
+    @Test
+    void rowWithTwoDateColumnsAndNoHeaderIsLeftForReview() {
+        String body = "<table><tr><td>1차 신청</td><td>10.27(화)~10.30(금)</td><td>11.20(금)</td></tr></table>";
+        NoticeView v = new NoticeView(1L, "장학", "테스트", LocalDate.of(2026, 10, 1), "",
+                org.jsoup.Jsoup.parseBodyFragment(body).body(), body, false, List.of());
+        assertThat(DateItemExtractor.extract(v)).isEmpty();
+    }
+
+    @Test
+    void academicYearIsNotAGrade() {
+        assertThat(DateItemExtractor.gradeOf("2024학년도 입학생 대상")).isNull();
+        assertThat(DateItemExtractor.gradeOf("3학년 이상")).isEqualTo("3");
+        assertThat(DateItemExtractor.gradeOf("4학년 (약대 4학년 이상)")).isEqualTo("4");
+        assertThat(DateItemExtractor.gradeOf("2~4학년")).isNull();
+    }
+
+    @Test
+    void listParserTakesPostedDateFromDateColumnNotTitle() {
+        String html = "<table><tbody><tr><td class=\"b-num-box\">1</td><td>학사</td>"
+                + "<td class=\"b-td-title b-td-left\"><a class=\"b-title\" data-article-no=\"1\" href=\"?mode=view&articleNo=1\">"
+                + "교과목 변동사항 안내 &lt;2026.09.04. 업데이트&gt;</a></td>"
+                + "<td>2026.08.20</td><td>학사행정팀</td><td>10</td></tr></tbody></table>";
+        List<NoticeSummary> rows = NoticeListParser.parse(html);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).title()).contains("2026.09.04");
+        assertThat(rows.get(0).postedOn()).isEqualTo(LocalDate.of(2026, 8, 20));
     }
 }

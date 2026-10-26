@@ -54,7 +54,7 @@ public class Benefit {
                 || !seed.verifiedOn().equals(verifiedOn)
                 || !seed.renewalRule().equals(renewalRule)
                 || !java.util.Objects.equals(seed.endsOn(), endsOn)
-                || seed.active() != active;
+                || !active;
         if (changed) {
             name = seed.name();
             category = seed.category();
@@ -67,10 +67,20 @@ public class Benefit {
             verifiedOn = seed.verifiedOn();
             renewalRule = seed.renewalRule();
             endsOn = seed.endsOn();
-            active = seed.active();
+            active = true;
             updatedAt = OffsetDateTime.now();
         }
         return changed;
+    }
+
+    /** 파일에서 빠진 항목. 지우지 않고 숨긴다. 바뀐 게 있으면 true. */
+    public boolean deactivate() {
+        if (!active) {
+            return false;
+        }
+        active = false;
+        updatedAt = OffsetDateTime.now();
+        return true;
     }
 
     public boolean isStale(LocalDate today) {

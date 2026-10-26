@@ -31,6 +31,14 @@ class KoreanDateParserTest {
     }
 
     @Test
+    void singleDayWithOneTimeIsADeadline() {
+        List<DateRange> r = parser.parse("일반휴학원 제출 마감일 10.23(금) / 17:30");
+        assertThat(r).hasSize(1);
+        assertThat(r.get(0).startsAt()).isNull();
+        assertThat(r.get(0).endsAt()).isEqualTo(LocalTime.of(17, 30));
+    }
+
+    @Test
     void titleRangeWithoutYearUsesBaseYear() {
         List<DateRange> r = parser.parse("두산연강재단 대학 장학생 선발 안내(10. 14.(수) ~ 11. 13.(금) 18:00까지)");
         assertThat(r).hasSize(1);
@@ -48,6 +56,13 @@ class KoreanDateParserTest {
     }
 
     @Test
+    void untilSuffixMakesMonthDayTrustworthy() {
+        List<DateRange> r = parser.parse("서류 제출 10. 30.까지");
+        assertThat(r).hasSize(1);
+        assertThat(r.get(0).end()).isEqualTo(LocalDate.of(2026, 10, 30));
+    }
+
+    @Test
     void slashRangeInParens() {
         List<DateRange> r = parser.parse("국가근로장학금 추가신청기간 안내(10/21~10/29)");
         assertThat(r).hasSize(1);
@@ -60,7 +75,7 @@ class KoreanDateParserTest {
         List<DateRange> r = parser.parse("접수 기간: 2026년 10월 30일(금) 18:00까지");
         assertThat(r).hasSize(1);
         assertThat(r.get(0).end()).isEqualTo(LocalDate.of(2026, 10, 30));
-        assertThat(r.get(0).startsAt()).isEqualTo(LocalTime.of(18, 0));
+        assertThat(r.get(0).endsAt()).isEqualTo(LocalTime.of(18, 0));
     }
 
     @Test
@@ -71,12 +86,32 @@ class KoreanDateParserTest {
     }
 
     @Test
+    void yearOnlyOnTheEndAppliesBackwards() {
+        List<DateRange> r = parser.parse("12. 20.(일) ~ 2027. 1. 5.(화)");
+        assertThat(r).hasSize(1);
+        assertThat(r.get(0).start()).isEqualTo(LocalDate.of(2026, 12, 20));
+        assertThat(r.get(0).end()).isEqualTo(LocalDate.of(2027, 1, 5));
+    }
+
+    @Test
     void loneMonthDayWithoutWeekdayIsIgnored() {
         assertThat(parser.parse("수업일수 1/4 경과")).isEmpty();
         assertThat(parser.parse("직전 학기 평점 3.0 이상")).isEmpty();
         assertThat(parser.parse("문의 02-2164-4149")).isEmpty();
         assertThat(parser.parse("2026학년도 2학기")).isEmpty();
         assertThat(parser.parse("동일 과목 1,000번 클릭")).isEmpty();
+    }
+
+    @Test
+    void decimalPairsAndNumericTailsAreNotDates() {
+        assertThat(parser.parse("신청 자격: 직전학기 평점 2.5 ~ 3.5")).isEmpty();
+        assertThat(parser.parse("평점 4.5점 만점")).isEmpty();
+        assertThat(parser.parse("3.0 이상 ~ 4.0 이하")).isEmpty();
+    }
+
+    @Test
+    void reversedRangeIsRejected() {
+        assertThat(parser.parse("10. 30.(금) ~ 10. 1.(목)")).isEmpty();
     }
 
     @Test

@@ -52,6 +52,8 @@ public final class BenefitSeedFile {
             require(notBlank(s.sourceName()), s, "source_name 없음");
             require(s.sourceUrl() != null && s.sourceUrl().startsWith("https://"), s, "source_url은 https");
             require(s.verifiedOn() != null, s, "verified_on 없음");
+            require(!s.verifiedOn().isAfter(java.time.LocalDate.now()), s, "verified_on이 미래");
+            require(s.endsOn() == null || !s.endsOn().isBefore(s.verifiedOn()), s, "ends_on이 verified_on보다 앞");
             require(notBlank(s.renewalRule()), s, "renewal_rule 없음");
         }
     }

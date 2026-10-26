@@ -7,6 +7,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * 운영에서는 비워 두고 스케줄러에 맡긴다.
  */
 @Component
+@Order(10)
 public class RunOnceRunner implements ApplicationRunner {
 
     private final AppProperties props;

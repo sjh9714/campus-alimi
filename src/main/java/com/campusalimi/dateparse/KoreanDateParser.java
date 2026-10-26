@@ -12,10 +12,13 @@ import java.util.regex.Pattern;
  * 학교 공지에 흔한 한국어 날짜 표기를 읽는다.
  *
  * <p>읽는 것: "2026. 7. 7.(화) ~ 7. 12.(일) / 09:00 ~ 23:59", "10. 14.(수) ~ 11. 13.(금) 18:00까지",
- * "(~10.26)", "(10/21~10/29)", "2026년 10월 30일", "2026-10-30".
+ * "(~10.26)", "(10/21~10/29)", "2026년 10월 30일", "2026-10-30", "10. 30.까지".
  *
- * <p>읽지 않는 것: 연도 없는 월.일 표기에 요일도 "일"도 없고 "~"로 짝도 없는 것("수업일수 1/4", "3.0 이상").
+ * <p>읽지 않는 것: 연도·요일·"일"이 없는 월.일 표기가 혼자 있는 것("수업일수 1/4", "3.0 이상"),
+ * 점으로 쓴 소수 쌍("평점 2.5 ~ 3.5"), 뒤에 "이상·점·학점·%"가 붙는 것, 끝이 시작보다 앞선 범위.
  * 추측하느니 비워 두고 검수로 보내는 편이 낫다. 연도가 없으면 게시일 기준으로 가장 가까운 앞날을 고른다.
+ *
+ * <p>시각 규칙. 날짜 하나에 시각이 하나면 마감 시각(endsAt)이다. 둘이면 시작·끝이다.
  */
 public final class KoreanDateParser {
 
@@ -23,11 +26,14 @@ public final class KoreanDateParser {
     private static final String MD = "(\\d{1,2})\\s*([./월])\\s*(\\d{1,2})\\s*\\.?\\s*(일)?";
     private static final String WEEKDAY = "(\\(\\s*[월화수목금토일]\\s*\\))?";
     private static final String TIME = "(?:\\s*/?\\s*(\\d{1,2}):(\\d{2})(?:\\s*[~∼〜～\\-–]\\s*(\\d{1,2}):(\\d{2}))?)?";
+    private static final String UNTIL = "(\\s*까지)?";
 
     private static final Pattern TOKEN = Pattern.compile(
-            "(?<![\\d:])(?:" + FULL + "|" + MD + ")\\s*" + WEEKDAY + TIME);
+            "(?<![\\d:])(?:" + FULL + "|" + MD + ")\\s*" + WEEKDAY + TIME + UNTIL);
     private static final Pattern CONNECTOR = Pattern.compile("^\\s*(?:[~∼〜～\\-–—]|부터)\\s*$");
     private static final Pattern LEADING_TILDE = Pattern.compile("[~∼〜～]\\s*$");
+    /** 날짜가 아니라 수치를 뜻하는 뒷말. "3.0 이상", "4.5점", "2.5 학점", "12.5%" */
+    private static final Pattern NUMERIC_TAIL = Pattern.compile("^\\s*(?:이상|이하|초과|미만|점|학점|%|배|kg|km|원)");
 
     private final LocalDate baseDate;
 
@@ -69,19 +75,39 @@ public final class KoreanDateParser {
     }
 
     private DateRange buildRange(Token a, Token b, String text) {
-        Integer year = a.year != null ? a.year : b.year;
-        LocalDate start = resolve(a, year);
-        if (start == null) {
+        // "평점 2.5 ~ 3.5"처럼 점으로 쓴 월.일 쌍은 둘 다 요일·연도·"일"이 없으면 소수로 본다. 슬래시(10/21~10/29)는 소수가 아니다.
+        if (!a.selfSufficient() && !b.selfSufficient() && (a.dotSeparated || b.dotSeparated)) {
             return null;
         }
-        LocalDate end = b.year != null ? resolve(b, b.year) : resolve(b, start.getYear());
-        if (end == null) {
+        LocalDate start;
+        LocalDate end;
+        if (a.year != null) {
+            start = resolve(a, a.year);
+            end = b.year != null ? resolve(b, b.year) : resolve(b, start == null ? null : start.getYear());
+            if (start != null && end != null && end.isBefore(start) && b.year == null) {
+                end = end.plusYears(1);
+            }
+        } else if (b.year != null) {
+            // "12. 20.(일) ~ 2027. 1. 5.(화)" 처럼 연도가 뒤에만 있으면 시작은 끝과 같은 해, 끝보다 늦으면 한 해 전
+            end = resolve(b, b.year);
+            start = end == null ? null : resolve(a, end.getYear());
+            if (start != null && end != null && start.isAfter(end)) {
+                start = start.minusYears(1);
+            }
+        } else {
+            start = resolve(a, null);
+            end = start == null ? null : resolve(b, start.getYear());
+            if (start != null && end != null && end.isBefore(start)) {
+                end = end.plusYears(1);
+            }
+        }
+        if (start == null || end == null) {
             return null;
         }
-        if (end.isBefore(start)) {
-            end = end.plusYears(1);
+        // 한 해를 넘기는 기간은 거의 없다. 1년 가까이 벌어지면 거꾸로 적힌 것이니 버린다.
+        if (end.isAfter(start.plusDays(300))) {
+            return null;
         }
-        // "7. 7.(화) ~ 7. 12.(일) / 09:00 ~ 23:59" 처럼 시간이 뒤쪽 날짜에만 붙는 경우가 흔하다.
         LocalTime startsAt;
         LocalTime endsAt;
         if (a.time1 != null) {
@@ -110,7 +136,10 @@ public final class KoreanDateParser {
         if (endOnly) {
             return new DateRange(null, day, null, t.time1, "~" + matched);
         }
-        return new DateRange(day, day, t.time1, t.time2, matched);
+        if (t.time2 != null) {
+            return new DateRange(day, day, t.time1, t.time2, matched);
+        }
+        return new DateRange(day, day, null, t.time1, matched);
     }
 
     private LocalDate resolve(Token t, Integer explicitYear) {
@@ -128,7 +157,7 @@ public final class KoreanDateParser {
         }
     }
 
-    private static List<Token> tokenize(String text) {
+    private List<Token> tokenize(String text) {
         List<Token> tokens = new ArrayList<>();
         Matcher m = TOKEN.matcher(text);
         while (m.find()) {
@@ -141,13 +170,18 @@ public final class KoreanDateParser {
                 t.day = Integer.parseInt(m.group(3));
             } else {
                 t.month = Integer.parseInt(m.group(4));
+                t.dotSeparated = ".".equals(m.group(5));
                 t.day = Integer.parseInt(m.group(6));
                 t.hasDaySuffix = m.group(7) != null;
             }
             t.hasWeekday = m.group(8) != null;
             t.time1 = time(m.group(9), m.group(10));
             t.time2 = time(m.group(11), m.group(12));
+            t.hasUntil = m.group(13) != null;
             if (t.month < 1 || t.month > 12 || t.day < 1 || t.day > 31) {
+                continue;
+            }
+            if (NUMERIC_TAIL.matcher(text.substring(t.end)).find()) {
                 continue;
             }
             tokens.add(t);
@@ -172,14 +206,16 @@ public final class KoreanDateParser {
         Integer year;
         int month;
         int day;
+        boolean dotSeparated;
         boolean hasWeekday;
         boolean hasDaySuffix;
+        boolean hasUntil;
         LocalTime time1;
         LocalTime time2;
 
-        /** 혼자서도 날짜로 믿을 만한가. 연도가 있거나, 요일이 붙었거나, "일"로 끝나면 그렇다. */
+        /** 혼자서도 날짜로 믿을 만한가. 연도가 있거나, 요일이 붙었거나, "일"이나 "까지"로 끝나면 그렇다. */
         boolean selfSufficient() {
-            return year != null || hasWeekday || hasDaySuffix;
+            return year != null || hasWeekday || hasDaySuffix || hasUntil;
         }
     }
 }

@@ -10,5 +10,7 @@ public interface DateItemRepository extends JpaRepository<DateItem, Long> {
 
     List<DateItem> findByNoticeIdOrderByEndsOnAsc(Long noticeId);
 
+    List<DateItem> findByNaturalKeyStartingWith(String prefix);
+
     long countBySourceKind(String sourceKind);
 }

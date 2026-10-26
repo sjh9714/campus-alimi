@@ -18,7 +18,8 @@ import org.jsoup.nodes.Element;
  *
  * <ol>
  * <li>제목. 장학 공지는 "(10. 14.(수) ~ 11. 13.(금))"처럼 제목에 기간을 적는 경우가 많다.</li>
- * <li>표. 수강신청 일정처럼 구분·학년·일정 열로 된 표는 행마다 항목이 된다. rowspan으로 묶인 라벨은 아래 행에도 붙인다.</li>
+ * <li>표. 수강신청 일정처럼 구분·학년·일정 열로 된 표는 행마다 항목이 된다. rowspan으로 묶인 라벨은 아래 행에도 붙인다.
+ * 한 행에 날짜 열이 둘 이상이면(신청기간 | 결과발표) 열마다 따로 항목을 내고 머리글을 제목에 붙인다. 절대 합치지 않는다.</li>
  * <li>문단. 제목과 표에서 아무것도 못 찾았을 때만, "기간", "마감", "신청" 같은 말이 있는 줄에서 읽는다.</li>
  * </ol>
  *
@@ -26,8 +27,9 @@ import org.jsoup.nodes.Element;
  */
 public final class DateItemExtractor {
 
-    private static final Pattern GRADE = Pattern.compile("([1-4])\\s*학년");
+    private static final Pattern GRADE = Pattern.compile("(?<!\\d)([1-4])\\s*학년(?!도)");
     private static final Pattern ALL_GRADES = Pattern.compile("전체\\s*학년|전\\s*학년");
+    private static final Pattern GRADE_RANGE = Pattern.compile("[1-4]\\s*[~∼〜～\\-–,·]\\s*[1-4]\\s*학년");
     private static final Pattern LINE_KEYWORD = Pattern.compile("신청|접수|제출|마감|기간|까지|모집|납부|등록");
     private static final int TITLE_LIMIT = 80;
 
@@ -94,8 +96,8 @@ public final class DateItemExtractor {
             }
 
             List<String> labels = new ArrayList<>();
-            List<DateRange> ranges = new ArrayList<>();
-            int firstDateCol = -1;
+            List<Integer> dateCols = new ArrayList<>();
+            Map<Integer, List<DateRange>> rangesByCol = new HashMap<>();
             for (int c = 0; c < cells.size(); c++) {
                 String cell = cells.get(c);
                 List<DateRange> found = parser.parse(cell);
@@ -105,26 +107,34 @@ public final class DateItemExtractor {
                         labels.add(label);
                     }
                 } else {
-                    if (firstDateCol < 0) {
-                        firstDateCol = c;
-                    }
-                    ranges.addAll(found);
+                    dateCols.add(c);
+                    rangesByCol.put(c, found);
                 }
             }
-            if (ranges.isEmpty()) {
+            if (dateCols.isEmpty()) {
                 // 날짜 없는 첫 행은 머리글이다. "일반휴학원 제출 마감일 | 비고"처럼 날짜 열 이름이 곧 제목인 표가 있다.
                 if (header == null && !cells.isEmpty()) {
                     header = cells.stream().map(DateItemExtractor::cleanLabel).toList();
                 }
                 continue;
             }
-            DateRange merged = merge(ranges);
-            if (firstDateCol == 0 && header != null && !header.isEmpty() && !header.get(0).isEmpty()) {
-                labels.add(0, header.get(0));
+            for (int c : dateCols) {
+                List<String> titleParts = new ArrayList<>();
+                String columnName = header != null && c < header.size() ? header.get(c) : "";
+                // 날짜 열이 하나뿐이고 그 열이 첫 열이면 머리글이 곧 제목이다. 날짜 열이 여럿이면 열 이름으로 구분한다.
+                if ((dateCols.size() > 1 || c == 0) && !columnName.isEmpty()) {
+                    titleParts.add(columnName);
+                }
+                titleParts.addAll(labels);
+                if (dateCols.size() > 1 && header == null) {
+                    // 열 이름을 모르면 어느 날짜가 마감인지 알 수 없다. 추측하지 않고 검수로 보낸다.
+                    continue;
+                }
+                DateRange merged = merge(rangesByCol.get(c));
+                String labelText = String.join(" · ", titleParts);
+                String title = labelText.isEmpty() ? fallbackTitle : clip(labelText);
+                items.add(new ExtractedItem(title, merged, gradeOf(String.join(" ", labels)), where + ".r" + rowIndex + ".c" + c));
             }
-            String labelText = String.join(" · ", labels);
-            String title = labelText.isEmpty() ? fallbackTitle : clip(labelText);
-            items.add(new ExtractedItem(title, merged, gradeOf(labelText), where + ".r" + rowIndex));
         }
         return items;
     }
@@ -159,7 +169,7 @@ public final class DateItemExtractor {
         return items;
     }
 
-    /** 한 칸에 날짜가 여럿이면(변경기간 2차처럼 날마다 한 줄) 처음부터 끝까지 한 기간으로 합친다. */
+    /** 한 칸 안에 날짜가 여럿이면(변경기간 2차처럼 날마다 한 줄) 처음부터 끝까지 한 기간으로 합친다. 칸을 넘어 합치지는 않는다. */
     private static DateRange merge(List<DateRange> ranges) {
         if (ranges.size() == 1) {
             return ranges.get(0);
@@ -199,7 +209,11 @@ public final class DateItemExtractor {
         if (ALL_GRADES.matcher(text).find()) {
             return "ALL";
         }
-        // "4학년 (약대 4학년 이상)" 처럼 같은 학년이 두 번 나오면 그 학년, 다른 학년이 섞이면 모름.
+        // "2~4학년"처럼 범위로 적힌 것은 한 학년이 아니다. 모름으로 두고 검수에서 정한다.
+        if (GRADE_RANGE.matcher(text).find()) {
+            return null;
+        }
+        // "4학년 (약대 4학년 이상)" 처럼 같은 학년이 두 번 나오면 그 학년, 다른 학년이 섞이면 모름. "2024학년도"는 학년이 아니다.
         Set<String> grades = new LinkedHashSet<>();
         Matcher m = GRADE.matcher(text);
         while (m.find()) {

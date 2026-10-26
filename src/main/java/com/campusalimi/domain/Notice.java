@@ -22,6 +22,8 @@ public class Notice {
     public static final String REASON_IMAGE_ONLY = "IMAGE_ONLY";
     /** 글자는 있는데 날짜를 못 읽었다. */
     public static final String REASON_NO_DATE = "NO_DATE";
+    /** 본문 페이지를 읽지 못했다(네트워크, 구조 변경). 운영자가 원문을 열어 봐야 한다. */
+    public static final String REASON_PARSE_FAILED = "PARSE_FAILED";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,6 +53,15 @@ public class Notice {
         this.postedOn = postedOn;
         this.writer = writer;
         this.url = url;
+        this.bodyText = bodyText;
+        this.hasImages = hasImages;
+        this.attachments = attachments;
+        this.reviewReason = reviewReason;
+    }
+
+    /** 다시 처리한 결과로 본문과 사유를 갱신한다. 검수 상태는 건드리지 않는다. */
+    public void reparsed(String title, String bodyText, boolean hasImages, String attachments, String reviewReason) {
+        this.title = title;
         this.bodyText = bodyText;
         this.hasImages = hasImages;
         this.attachments = attachments;

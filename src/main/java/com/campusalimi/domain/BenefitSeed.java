@@ -3,7 +3,7 @@ package com.campusalimi.domain;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDate;
 
-/** benefits.yml의 항목 하나. 필드 이름은 파일의 키와 같다. */
+/** benefits.yml의 항목 하나. 필드 이름은 파일의 키와 같다. 파일에 있는 항목은 전부 활성이다. */
 public record BenefitSeed(
         String slug,
         String name,
@@ -16,10 +16,5 @@ public record BenefitSeed(
         @JsonProperty("source_url") String sourceUrl,
         @JsonProperty("verified_on") LocalDate verifiedOn,
         @JsonProperty("renewal_rule") String renewalRule,
-        @JsonProperty("ends_on") LocalDate endsOn,
-        Boolean activeFlag) {
-
-    public boolean active() {
-        return activeFlag == null || activeFlag;
-    }
+        @JsonProperty("ends_on") LocalDate endsOn) {
 }
