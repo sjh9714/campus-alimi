@@ -10,4 +10,6 @@ public interface NoticeRepository extends JpaRepository<Notice, Long> {
     boolean existsByArticleNo(long articleNo);
 
     long countByReviewReason(String reviewReason);
+
+    java.util.List<Notice> findByStatusOrderByPostedOnDesc(String status);
 }

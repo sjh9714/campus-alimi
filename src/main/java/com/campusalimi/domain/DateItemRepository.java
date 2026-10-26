@@ -12,5 +12,7 @@ public interface DateItemRepository extends JpaRepository<DateItem, Long> {
 
     List<DateItem> findByNaturalKeyStartingWith(String prefix);
 
+    List<DateItem> findByEndsOnGreaterThanEqual(java.time.LocalDate day);
+
     long countBySourceKind(String sourceKind);
 }

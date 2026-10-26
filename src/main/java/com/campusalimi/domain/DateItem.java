@@ -39,6 +39,8 @@ public class DateItem {
     private String status = STATUS_AUTO;
     private OffsetDateTime createdAt = OffsetDateTime.now();
     private OffsetDateTime updatedAt = OffsetDateTime.now();
+    private OffsetDateTime reviewedAt;
+    private String reviewedBy;
 
     protected DateItem() {
     }
@@ -70,6 +72,38 @@ public class DateItem {
         item.endsAt = endsAt;
         item.targetGrade = targetGrade;
         return item;
+    }
+
+    /** 운영자가 손으로 넣은 항목. 이미지에만 날짜가 있는 공지가 여기로 온다. */
+    public static DateItem manual(Long noticeId, String title, LocalDate startsOn, LocalDate endsOn, LocalTime startsAt,
+            LocalTime endsAt, String targetGrade, String targetDept, String targetNote, String by) {
+        DateItem item = new DateItem();
+        item.sourceKind = SOURCE_MANUAL;
+        item.noticeId = noticeId;
+        item.naturalKey = "manual:" + java.util.UUID.randomUUID();
+        item.review(title, startsOn, endsOn, startsAt, endsAt, targetGrade, targetDept, targetNote, by);
+        return item;
+    }
+
+    /** 검수. 사람이 확인하거나 고친 뒤에는 수집이 덮어쓰지 않는다. */
+    public void review(String title, LocalDate startsOn, LocalDate endsOn, LocalTime startsAt, LocalTime endsAt,
+            String targetGrade, String targetDept, String targetNote, String by) {
+        this.title = title;
+        this.startsOn = startsOn;
+        this.endsOn = endsOn;
+        this.startsAt = startsAt;
+        this.endsAt = endsAt;
+        this.targetGrade = targetGrade;
+        this.targetDept = targetDept;
+        this.targetNote = targetNote;
+        markReviewed(by);
+    }
+
+    public void markReviewed(String by) {
+        this.status = STATUS_REVIEWED;
+        this.reviewedAt = OffsetDateTime.now();
+        this.reviewedBy = by;
+        this.updatedAt = reviewedAt;
     }
 
     /** 검수 전(AUTO) 항목만 수집 결과로 덮어쓴다. 사람이 고친 것은 건드리지 않는다. */
@@ -135,6 +169,14 @@ public class DateItem {
 
     public String getTargetGrade() {
         return targetGrade;
+    }
+
+    public String getTargetDept() {
+        return targetDept;
+    }
+
+    public String getTargetNote() {
+        return targetNote;
     }
 
     public String getStatus() {

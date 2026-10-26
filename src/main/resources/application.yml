@@ -11,14 +11,30 @@ spring:
       ddl-auto: validate
   flyway:
     enabled: true
+  mail:
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
 
 server:
   port: ${PORT:8080}
+  forward-headers-strategy: framework
 
 app:
   base-url: https://www.catholic.ac.kr
   fetch-interval-ms: 1500
   run-once: ${RUN_ONCE:}
+  # 로그인 링크와 화면 주소의 바탕. 로컬은 Next dev 서버, 운영은 Caddy가 받는 도메인
+  public-url: ${PUBLIC_URL:http://localhost:3000}
+  admin-email: ${ADMIN_EMAIL:}
+  cookie-secure: ${COOKIE_SECURE:false}
+  mail:
+    mode: ${MAIL_MODE:console}
+    from: ${MAIL_FROM:campus-alimi@localhost}
   schedule:
     cron: "0 0 6 * * *"
     campus: 성심

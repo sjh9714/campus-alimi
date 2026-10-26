@@ -41,6 +41,7 @@ public class Notice {
     private String reviewReason;
     private OffsetDateTime firstSeenAt = OffsetDateTime.now();
     private OffsetDateTime reviewedAt;
+    private String reviewedBy;
 
     protected Notice() {
     }
@@ -57,6 +58,12 @@ public class Notice {
         this.hasImages = hasImages;
         this.attachments = attachments;
         this.reviewReason = reviewReason;
+    }
+
+    public void markReviewed(String by) {
+        this.status = STATUS_REVIEWED;
+        this.reviewedAt = OffsetDateTime.now();
+        this.reviewedBy = by;
     }
 
     /** 다시 처리한 결과로 본문과 사유를 갱신한다. 검수 상태는 건드리지 않는다. */
@@ -94,6 +101,10 @@ public class Notice {
 
     public boolean isHasImages() {
         return hasImages;
+    }
+
+    public String getAttachments() {
+        return attachments;
     }
 
     public String getStatus() {
