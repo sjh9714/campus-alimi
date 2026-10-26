@@ -108,6 +108,17 @@ export default function Home() {
         </p>
       </div>
 
+      {items === null ? (
+        error ? (
+          <div className="empty" role="alert">
+            <p>{error}</p>
+            <button onClick={load}>다시 시도</button>
+          </div>
+        ) : (
+          <div className="empty">불러오는 중...</div>
+        )
+      ) : (
+      <>
       {error && <div className="msg error" role="alert">{error}</div>}
 
       <div className="chips" role="group" aria-label="종류 필터">
@@ -148,8 +159,7 @@ export default function Home() {
               </button>
             </div>
           )}
-          {items === null && !error && <div className="empty">불러오는 중...</div>}
-          {items !== null && visible.length === 0 && (
+          {visible.length === 0 && (
             <div className="empty">{day ? "이날 마감인 항목이 없어요." : "표시할 마감이 없어요."}</div>
           )}
           {groups.map(({ g, items: list }) => (
@@ -206,6 +216,8 @@ export default function Home() {
           </div>
         </aside>
       </div>
+      </>
+      )}
     </main>
   );
 }

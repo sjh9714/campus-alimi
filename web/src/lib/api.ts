@@ -91,12 +91,17 @@ export class ApiError extends Error {
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(API_BASE + path, {
-    method,
-    credentials: "include",
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, {
+      method,
+      credentials: "include",
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, "서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {

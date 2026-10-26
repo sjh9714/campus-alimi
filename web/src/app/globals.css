@@ -523,6 +523,14 @@ label {
   margin-bottom: 14px;
 }
 
+.chips {
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
 .chip {
   border-radius: 999px;
   padding: 6px 12px;
@@ -709,6 +717,92 @@ label {
   margin-top: 32px;
 }
 
+/* ───── 검수 ───── */
+
+.review {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-height: calc(100vh - var(--header-h) - 200px);
+  overflow-y: auto;
+  position: sticky;
+  top: calc(var(--header-h) + 24px);
+}
+
+.review-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: transparent;
+  font-weight: 400;
+  white-space: normal;
+}
+
+.review-row.selected {
+  background: var(--accent-soft);
+}
+
+.review-title {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--fg);
+  word-break: keep-all;
+}
+
+.detail-title {
+  display: block;
+  font-size: 19px;
+  line-height: 1.4;
+  margin: 12px 0 6px;
+  word-break: keep-all;
+}
+
+.back {
+  display: none;
+  margin: -6px 0 10px -8px;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.item-form {
+  border-top: 1px solid var(--line);
+  padding: 4px 0 14px;
+}
+
+.detail-actions {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+button.danger {
+  color: var(--urgent);
+}
+
 /* ───── 메시지 ───── */
 
 .msg {
@@ -731,6 +825,10 @@ label {
   background: var(--surface);
   border: 1px dashed var(--line);
   border-radius: var(--radius);
+}
+
+.empty p {
+  margin: 0 0 12px;
 }
 
 details summary {
@@ -786,6 +884,29 @@ details summary {
   }
   .benefit-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .review {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .review-list {
+    position: static;
+    max-height: none;
+  }
+  .review .review-detail {
+    display: none;
+  }
+  .review.has-detail .review-list {
+    display: none;
+  }
+  .review.has-detail .review-detail {
+    display: block;
+  }
+  .back {
+    display: inline-block;
+  }
+  .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
   }
 }
 
