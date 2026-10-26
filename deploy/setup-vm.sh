@@ -21,6 +21,15 @@ if ! command -v docker >/dev/null 2>&1; then
   sudo usermod -aG docker "$USER"
 fi
 
+echo "== 스왑 2GB (메모리 1GB 서버에서 OOM 방지)"
+if ! swapon --show | grep -q /swapfile; then
+  sudo fallocate -l 2G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile >/dev/null
+  sudo swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+fi
+
 echo "== 방화벽 80, 443"
 # 오라클 Ubuntu 이미지는 iptables INPUT에 REJECT 규칙이 있어 보안 목록을 열어도 막힌다.
 sudo iptables -C INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || sudo iptables -I INPUT 6 -p tcp --dport 80 -j ACCEPT
