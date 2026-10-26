@@ -25,6 +25,21 @@ RUN_ONCE=all ./gradlew bootRun  # 학사일정과 공지를 한 번 수집하고
 ./gradlew bootRun               # 상주 실행. 학사일정은 매일 06:00, 공지는 매시 07분에 수집
 ```
 
+화면은 `web/`에 있습니다. Node 22가 필요합니다.
+
+```bash
+cd web && npm install
+NEXT_PUBLIC_API_BASE=http://localhost:8080 npm run dev   # http://localhost:3000
+npm run build                                           # out/ 에 정적 파일
+```
+
+로그인은 이메일 링크입니다. 로컬(`MAIL_MODE=console`)에서는 링크가 API 로그에 찍히니 그 주소를 브라우저에 붙여 넣으면 됩니다.
+로컬에서 링크가 API를 가리키게 하려면 API를 `API_URL=http://localhost:8080` 으로 띄웁니다. 검수 화면은 `ADMIN_EMAIL`로 지정한 이메일 하나만 들어갈 수 있습니다.
+
+```bash
+ADMIN_EMAIL=you@example.com API_URL=http://localhost:8080 ./gradlew bootRun
+```
+
 수집 결과는 `date_item`(날짜 항목), `notice`(공지, 검수 상태), `notice_raw`(원문), `fetch_log`(요청 기록)에 쌓입니다.
 
 ```bash

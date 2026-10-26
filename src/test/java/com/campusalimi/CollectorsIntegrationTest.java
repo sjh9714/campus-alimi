@@ -138,7 +138,11 @@ class CollectorsIntegrationTest {
     @Test
     void scheduleIsIdempotentAndRefreshesChangedDates() {
         ScheduleStore.Result first = scheduleCollector.collect(2026);
-        assertThat(first.kept()).isGreaterThan(30);
+        // 성심 항목 48건 중 돈·학적이 걸린 것만 남는다. 미사·교수회의·수업일수는 뺀다.
+        assertThat(first.kept()).isBetween(15, 30);
+        assertThat(dateItems.findByNaturalKey("schedule:2026:재학생 수강신청#1")).isPresent()
+                .get().satisfies(i -> assertThat(i.getStatus()).isEqualTo(DateItem.STATUS_REVIEWED));
+        assertThat(dateItems.findByNaturalKey("schedule:2026:교수회의#1")).isEmpty();
         long stored = dateItems.countBySourceKind(DateItem.SOURCE_SCHEDULE);
         assertThat(stored).isEqualTo(first.kept());
 

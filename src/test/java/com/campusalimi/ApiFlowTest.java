@@ -188,6 +188,7 @@ class ApiFlowTest {
     /** 링크는 public-url로 만들어지니 테스트 서버 주소로 바꿔 부른다. */
     private String lastLink() {
         Matcher m = Pattern.compile("http://localhost:3000(/api/auth/consume\\?token=[A-Za-z0-9_-]+)").matcher(mail.lastBody());
+        // api-url을 비워 두면 public-url로 링크가 만들어진다. 테스트 서버 주소로 바꿔 부른다.
         assertThat(m.find()).isTrue();
         return rest.getRootUri() + m.group(1);
     }

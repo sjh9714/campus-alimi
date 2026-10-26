@@ -56,6 +56,10 @@ public class DateItem {
         item.campus = campus;
         item.targetGrade = "ALL";
         item.targetDept = "ALL";
+        // 학교가 표로 준 날짜다. 파싱이 없으니 사람이 다시 볼 것이 없다.
+        item.status = STATUS_REVIEWED;
+        item.reviewedBy = "schedule";
+        item.reviewedAt = OffsetDateTime.now();
         return item;
     }
 
@@ -106,9 +110,9 @@ public class DateItem {
         this.updatedAt = reviewedAt;
     }
 
-    /** 검수 전(AUTO) 항목만 수집 결과로 덮어쓴다. 사람이 고친 것은 건드리지 않는다. */
+    /** 수집 결과로 덮어쓴다. 사람이 고친 항목은 건드리지 않고, 학사일정 항목은 표가 바뀌면 따라간다. */
     public boolean refreshFrom(DateItem fresh) {
-        if (!STATUS_AUTO.equals(status)) {
+        if (!STATUS_AUTO.equals(status) && !"schedule".equals(reviewedBy)) {
             return false;
         }
         boolean changed = !fresh.title.equals(title)

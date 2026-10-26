@@ -1,0 +1,159 @@
+// API 호출. 쿠키 세션이라 credentials를 항상 보낸다.
+// 실패하면 서버의 ProblemDetail detail을 메시지로 던진다.
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+
+export type NoticeRef = {
+  articleNo: number;
+  title: string;
+  url: string;
+  category: string;
+  reviewReason: "PARSED" | "IMAGE_ONLY" | "NO_DATE" | "PARSE_FAILED";
+  status: "NEEDS_REVIEW" | "REVIEWED";
+};
+
+export type Item = {
+  id: number;
+  title: string;
+  startsOn: string | null;
+  endsOn: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  sourceKind: "SCHEDULE" | "NOTICE" | "MANUAL";
+  reviewed: boolean;
+  targetGrade: string | null;
+  targetDept: string | null;
+  targetNote: string | null;
+  campus: string | null;
+  notice: NoticeRef | null;
+  bucket: 0 | 1 | 2;
+  saved: boolean;
+};
+
+export type Benefit = {
+  id: number;
+  slug: string;
+  name: string;
+  category: string;
+  summary: string;
+  condition: string;
+  howTo: string;
+  price: string | null;
+  sourceName: string;
+  sourceUrl: string;
+  verifiedOn: string;
+  renewalRule: string;
+  endsOn: string | null;
+  stale: boolean;
+  checked: boolean;
+};
+
+export type Me = {
+  email: string;
+  entryYear: number | null;
+  major: string | null;
+  secondMajor: string | null;
+  grade: number | null;
+  admin: boolean;
+};
+
+export type ReviewNotice = {
+  id: number;
+  articleNo: number;
+  category: string;
+  title: string;
+  postedOn: string;
+  url: string;
+  reviewReason: NoticeRef["reviewReason"];
+  hasImages: boolean;
+  attachments: string;
+  status: NoticeRef["status"];
+  items: Item[];
+};
+
+export type ItemEdit = {
+  title: string;
+  startsOn: string | null;
+  endsOn: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  targetGrade: string | null;
+  targetDept: string | null;
+  targetNote: string | null;
+};
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(API_BASE + path, {
+    method,
+    credentials: "include",
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const problem = await res.json();
+      if (problem && problem.detail) detail = problem.detail;
+    } catch {
+      // 본문 없음
+    }
+    throw new ApiError(res.status, detail);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+export const api = {
+  items: (includePast = false) => call<Item[]>("GET", `/api/items?includePast=${includePast}`),
+  benefits: () => call<Benefit[]>("GET", "/api/benefits"),
+  me: async (): Promise<Me | null> => {
+    try {
+      return await call<Me>("GET", "/api/me");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return null;
+      throw e;
+    }
+  },
+  requestLogin: (email: string) => call<{ message: string }>("POST", "/api/auth/request", { email }),
+  logout: () => call<void>("POST", "/api/auth/logout"),
+  updateProfile: (p: { entryYear: number | null; major: string; secondMajor: string }) =>
+    call<Me>("PUT", "/api/me/profile", p),
+  save: (id: number) => call<void>("POST", `/api/me/saved/${id}`),
+  unsave: (id: number) => call<void>("DELETE", `/api/me/saved/${id}`),
+  check: (id: number) => call<void>("POST", `/api/me/benefits/${id}`),
+  uncheck: (id: number) => call<void>("DELETE", `/api/me/benefits/${id}`),
+  review: () => call<ReviewNotice[]>("GET", "/api/admin/review"),
+  markReviewed: (noticeId: number) => call<ReviewNotice>("POST", `/api/admin/notices/${noticeId}/reviewed`),
+  editItem: (itemId: number, edit: ItemEdit) => call<Item>("PUT", `/api/admin/items/${itemId}`, edit),
+  addItem: (noticeId: number, edit: ItemEdit) => call<Item>("POST", `/api/admin/notices/${noticeId}/items`, edit),
+  deleteItem: (itemId: number) => call<void>("DELETE", `/api/admin/items/${itemId}`),
+};
+
+export function dday(endsOn: string, today = new Date()): number {
+  const end = new Date(endsOn + "T00:00:00");
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((end.getTime() - base.getTime()) / 86_400_000);
+}
+
+export function formatDate(d: string | null): string {
+  if (!d) return "";
+  const [y, m, day] = d.split("-");
+  return `${y}.${m}.${day}`;
+}
+
+export function formatRange(item: Pick<Item, "startsOn" | "endsOn" | "startsAt" | "endsAt">): string {
+  const start = item.startsOn && item.startsOn !== item.endsOn ? formatDate(item.startsOn) : "";
+  const end = formatDate(item.endsOn);
+  const time = item.endsAt ? ` ${item.endsAt.slice(0, 5)}` : "";
+  const startTime = item.startsAt && !start ? `${item.startsAt.slice(0, 5)}~` : "";
+  if (start) return `${start} ~ ${end}${time}`;
+  return `${end} ${startTime}${time}`.trim();
+}

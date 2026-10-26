@@ -10,9 +10,16 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 학사일정 한 해치를 date_item에 맞춘다. 한 트랜잭션. 이번에 안 보인 자동 항목은 지운다. */
+/**
+ * 학사일정 한 해치를 date_item에 맞춘다. 한 트랜잭션. 이번에 안 보인 자동 항목은 지운다.
+ * 돈이나 학적이 걸린 항목만 남긴다. 미사·교수회의·수업일수 같은 것은 이 서비스의 범위가 아니다.
+ * 표에서 읽은 것이라 파싱이 없으니 검수 없이 확인된 것으로 둔다.
+ */
 @Service
 public class ScheduleStore {
+
+    static final java.util.regex.Pattern RELEVANT = java.util.regex.Pattern.compile(
+            "수강|등록|휴학|복학|성적|장학|졸업|계절학기|납부|학위수여|개시일");
 
     private final DateItemRepository dateItems;
 
@@ -31,7 +38,7 @@ public class ScheduleStore {
         int inserted = 0;
         int updated = 0;
         for (ScheduleEntry entry : entries) {
-            if (!entry.campuses().contains(campus)) {
+            if (!entry.campuses().contains(campus) || !RELEVANT.matcher(entry.title()).find()) {
                 continue;
             }
             kept++;
@@ -49,7 +56,7 @@ public class ScheduleStore {
         }
         int removed = 0;
         for (DateItem old : dateItems.findByNaturalKeyStartingWith("schedule:" + academicYear + ":")) {
-            if (!seen.contains(old.getNaturalKey()) && DateItem.STATUS_AUTO.equals(old.getStatus())) {
+            if (!seen.contains(old.getNaturalKey()) && DateItem.SOURCE_SCHEDULE.equals(old.getSourceKind())) {
                 dateItems.delete(old);
                 removed++;
             }

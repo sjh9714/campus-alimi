@@ -9,6 +9,7 @@ public record AppProperties(
         long fetchIntervalMs,
         String runOnce,
         String publicUrl,
+        String apiUrl,
         String adminEmail,
         boolean cookieSecure,
         Mail mail,
@@ -40,6 +41,11 @@ public record AppProperties(
 
     public String scheduleUrl(int year) {
         return baseUrl + "/ko/support/calendar2024_list.do?mode=list&siteId=ko&selectedYear=" + year;
+    }
+
+    /** 메일 링크가 가리킬 API 주소. 운영은 화면과 같은 origin, 로컬 개발은 8080. */
+    public String apiUrlOrPublic() {
+        return apiUrl == null || apiUrl.isBlank() ? publicUrl : apiUrl;
     }
 
     public boolean isAdmin(String email) {
