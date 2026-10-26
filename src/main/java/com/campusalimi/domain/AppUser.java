@@ -8,7 +8,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
-/** 사용자. 프로필 세 칸은 전부 선택이다 (ADR 008). */
+/** 사용자. 프로필 네 칸은 전부 선택이다 (ADR 008). */
 @Entity
 @Table(name = "app_user")
 public class AppUser {
@@ -20,6 +20,7 @@ public class AppUser {
     private Integer entryYear;
     private String major;
     private String secondMajor;
+    private String homeRegion;
     private OffsetDateTime createdAt = OffsetDateTime.now();
     private OffsetDateTime lastLoginAt;
 
@@ -30,10 +31,11 @@ public class AppUser {
         this.email = email;
     }
 
-    public void updateProfile(Integer entryYear, String major, String secondMajor) {
+    public void updateProfile(Integer entryYear, String major, String secondMajor, String homeRegion) {
         this.entryYear = entryYear;
         this.major = blankToNull(major);
         this.secondMajor = blankToNull(secondMajor);
+        this.homeRegion = blankToNull(homeRegion);
     }
 
     public void touchLogin() {
@@ -75,5 +77,9 @@ public class AppUser {
 
     public String getSecondMajor() {
         return secondMajor;
+    }
+
+    public String getHomeRegion() {
+        return homeRegion;
     }
 }

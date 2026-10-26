@@ -11,6 +11,9 @@ import com.campusalimi.fetch.PageFetcher;
 import com.campusalimi.notice.NoticeStore;
 import com.campusalimi.notice.NoticeSummary;
 import java.net.URI;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +43,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 @TestPropertySource(properties = { "app.scheduling.enabled=false", "app.fetch-interval-ms=0",
         "app.admin-email=admin@catholic.ac.kr", "app.public-url=http://localhost:3000", "app.mail.mode=console" })
+@SuppressWarnings({ "unchecked", "rawtypes" })
 class ApiFlowTest {
 
     @Container
@@ -54,6 +58,13 @@ class ApiFlowTest {
             return url -> {
                 throw new IllegalStateException("no network in this test");
             };
+        }
+
+        /** 픽스처 공지의 날짜(2026년 7월)가 아직 남아 있는 날로 고정한다. */
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(Instant.parse("2026-07-05T00:00:00Z"), ZoneId.of("Asia/Seoul"));
         }
     }
 
@@ -93,6 +104,23 @@ class ApiFlowTest {
     }
 
     @Test
+    void feedPutsRegistrationFirstAsOneCard() {
+        Map feed = rest.getForObject("/api/feed", Map.class);
+        List<Map> sections = (List<Map>) feed.get("sections");
+        Map must = sections.get(0);
+        assertThat(must.get("key")).isEqualTo("must");
+        List<Map> cards = (List<Map>) must.get("cards");
+        // 수강신청 일정 공지는 날짜가 여러 개지만 카드는 한 장이다.
+        assertThat(cards).filteredOn(c -> "notice".equals(((String) c.get("key")).split(":")[0])).hasSize(1);
+        Map card = cards.stream().filter(c -> ((String) c.get("key")).startsWith("notice:")).findFirst().orElseThrow();
+        assertThat((List) card.get("next")).isNotEmpty();
+        assertThat(feed.get("signedIn")).isEqualTo(false);
+
+        List<Map> regions = rest.getForObject("/api/regions", List.class);
+        assertThat(regions).hasSize(17);
+    }
+
+    @Test
     void magicLinkLogsInOnceAndSessionWorks() {
         String cookie = login("student@catholic.ac.kr");
 
@@ -106,11 +134,15 @@ class ApiFlowTest {
         ResponseEntity<Void> again = rest.getForEntity(URI.create(link), Void.class);
         assertThat(again.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 
-        // 프로필을 넣으면 학년이 계산된다.
+        // 프로필을 넣으면 학년이 계산된다. 연고 지역은 목록에 있는 값만 받는다.
         ResponseEntity<Map> profile = rest.exchange("/api/me/profile", HttpMethod.PUT,
-                withCookie(cookie, Map.of("entryYear", 2023, "major", "컴퓨터정보공학부")), Map.class);
+                withCookie(cookie, Map.of("entryYear", 2023, "major", "컴퓨터정보공학부", "homeRegion", "전라남도 순천시")), Map.class);
         assertThat(profile.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(profile.getBody().get("grade")).isNotNull();
+        assertThat(profile.getBody().get("homeRegion")).isEqualTo("전라남도 순천시");
+        assertThat(rest.exchange("/api/me/profile", HttpMethod.PUT,
+                withCookie(cookie, Map.of("homeRegion", "전라남도 강남구")), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
 
         // 항목 저장과 혜택 체크
         long itemId = ((Number) ((Map) rest.getForObject("/api/items?includePast=true", List.class).get(0)).get("id")).longValue();
@@ -134,8 +166,11 @@ class ApiFlowTest {
     void adminReviewsAndAddsManualItem() {
         String cookie = login("admin@catholic.ac.kr");
 
-        List<Map> queue = rest.exchange("/api/admin/review", HttpMethod.GET, withCookie(cookie, null), List.class).getBody();
+        Map review = rest.exchange("/api/admin/review", HttpMethod.GET, withCookie(cookie, null), Map.class).getBody();
+        List<Map> queue = (List<Map>) review.get("notices");
         assertThat(queue).hasSizeGreaterThanOrEqualTo(2);
+        // 수강신청 공지가 맨 앞이다. 모든 재학생이 대상이라서.
+        assertThat(queue.get(0).get("priority")).isEqualTo(0);
         Map imageOnly = queue.stream().filter(n -> ((Number) n.get("articleNo")).longValue() == 274128L).findFirst().orElseThrow();
         assertThat(imageOnly.get("reviewReason")).isEqualTo(Notice.REASON_IMAGE_ONLY);
         long noticeId = ((Number) imageOnly.get("id")).longValue();
@@ -152,6 +187,14 @@ class ApiFlowTest {
         ResponseEntity<String> bad = rest.exchange("/api/admin/notices/" + noticeId + "/items", HttpMethod.POST,
                 withCookie(cookie, Map.of("title", "x")), String.class);
         assertThat(bad.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        // 대상 범위를 운영자가 고친다. 잘못된 값은 거부.
+        ResponseEntity<Map> audience = rest.exchange("/api/admin/notices/" + noticeId + "/audience", HttpMethod.PUT,
+                withCookie(cookie, Map.of("scope", "GROUP", "label", "제1전공생")), Map.class);
+        assertThat(audience.getBody().get("audienceScope")).isEqualTo("GROUP");
+        assertThat(audience.getBody().get("audienceOverridden")).isEqualTo(true);
+        assertThat(rest.exchange("/api/admin/notices/" + noticeId + "/audience", HttpMethod.PUT,
+                withCookie(cookie, Map.of("scope", "ANYONE")), String.class).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
         // 공지를 검수 완료로
         ResponseEntity<Map> done = rest.exchange("/api/admin/notices/" + noticeId + "/reviewed", HttpMethod.POST,

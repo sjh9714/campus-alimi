@@ -42,6 +42,9 @@ public class Notice {
     private OffsetDateTime firstSeenAt = OffsetDateTime.now();
     private OffsetDateTime reviewedAt;
     private String reviewedBy;
+    /** 운영자가 고친 대상 범위. 비어 있으면 제목과 본문으로 정한다 (ADR 009). */
+    private String audienceScope;
+    private String audienceLabel;
 
     protected Notice() {
     }
@@ -66,13 +69,28 @@ public class Notice {
         this.reviewedBy = by;
     }
 
-    /** 다시 처리한 결과로 본문과 사유를 갱신한다. 검수 상태는 건드리지 않는다. */
-    public void reparsed(String title, String bodyText, boolean hasImages, String attachments, String reviewReason) {
+    /**
+     * 다시 처리한 결과로 본문과 사유를 갱신한다. 제목이나 본문이 바뀌었으면(기간 연장, 정정) 다시 검수 큐에 넣는다.
+     * 바뀌었으면 true.
+     */
+    public boolean reparsed(String title, String bodyText, boolean hasImages, String attachments, String reviewReason) {
+        boolean changed = !java.util.Objects.equals(this.title, title) || !java.util.Objects.equals(this.bodyText, bodyText);
+        if (changed && STATUS_REVIEWED.equals(status)) {
+            this.status = STATUS_NEEDS_REVIEW;
+            this.reviewedAt = null;
+            this.reviewedBy = null;
+        }
         this.title = title;
         this.bodyText = bodyText;
         this.hasImages = hasImages;
         this.attachments = attachments;
         this.reviewReason = reviewReason;
+        return changed;
+    }
+
+    public void overrideAudience(String scope, String label) {
+        this.audienceScope = scope;
+        this.audienceLabel = scope == null ? null : label;
     }
 
     public Long getId() {
@@ -113,5 +131,17 @@ public class Notice {
 
     public String getReviewReason() {
         return reviewReason;
+    }
+
+    public String getBodyText() {
+        return bodyText;
+    }
+
+    public String getAudienceScope() {
+        return audienceScope;
+    }
+
+    public String getAudienceLabel() {
+        return audienceLabel;
     }
 }

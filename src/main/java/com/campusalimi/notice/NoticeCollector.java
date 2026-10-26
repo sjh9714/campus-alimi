@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
- * 공지 목록을 1시간마다 읽고, 처음 보는 글만 본문을 가져와 저장한다.
+ * 공지 목록을 1시간마다 읽고, 처음 보는 글과 제목이 바뀐 글만 본문을 가져와 저장한다.
  * 글 하나가 실패해도 나머지는 계속 간다. 실패한 글은 PARSE_FAILED로 검수 큐에 들어간다.
  * 모든 공지는 NEEDS_REVIEW로 들어온다. 검수는 사람이 한다.
  */
@@ -69,7 +69,9 @@ public class NoticeCollector {
         int needsManual = 0;
         int failed = 0;
         for (NoticeSummary summary : summaries) {
-            if (notices.existsByArticleNo(summary.articleNo())) {
+            // 이미 본 글은 목록 제목이 바뀌었을 때만 다시 읽는다. "(기간 연장)"처럼 학교가 고친 글이다.
+            var known = notices.findByArticleNo(summary.articleNo());
+            if (known.isPresent() && !titleChanged(known.get().getTitle(), summary.title())) {
                 continue;
             }
             String html = null;
@@ -91,5 +93,14 @@ public class NoticeCollector {
             }
         }
         return new Result(summaries.size(), fetched, items, needsManual, failed);
+    }
+
+    /** 공백과 보이지 않는 글자는 무시한다. 목록과 본문 페이지가 제목을 조금 다르게 찍어도 매시간 다시 읽지 않게. */
+    static boolean titleChanged(String stored, String listed) {
+        return listed != null && !listed.isBlank() && !normalize(stored).equals(normalize(listed));
+    }
+
+    private static String normalize(String s) {
+        return s == null ? "" : s.replaceAll("[\\s\\uFEFF\\u200B-\\u200D]", "");
     }
 }

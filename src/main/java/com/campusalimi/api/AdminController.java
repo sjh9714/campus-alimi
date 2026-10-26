@@ -6,10 +6,17 @@ import com.campusalimi.domain.DateItem;
 import com.campusalimi.domain.DateItemRepository;
 import com.campusalimi.domain.Notice;
 import com.campusalimi.domain.NoticeRepository;
+import com.campusalimi.feed.Audience;
+import com.campusalimi.feed.Feed;
+import com.campusalimi.feed.Titles;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,15 +36,30 @@ public class AdminController {
     private final AuthService auth;
     private final NoticeRepository notices;
     private final DateItemRepository dateItems;
+    private final Clock clock;
 
-    public AdminController(AuthService auth, NoticeRepository notices, DateItemRepository dateItems) {
+    public AdminController(AuthService auth, NoticeRepository notices, DateItemRepository dateItems, Clock clock) {
+        this.clock = clock;
         this.auth = auth;
         this.notices = notices;
         this.dateItems = dateItems;
     }
 
-    public record ReviewNotice(long id, long articleNo, String category, String title, LocalDate postedOn, String url,
-            String reviewReason, boolean hasImages, String attachments, String status, List<ItemsController.ItemView> items) {
+    /**
+     * priority. 0 = 모든 재학생 대상(수강신청·등록금·국가장학금), 1 = 일반 공지, 2 = 지역·특정 대상(볼 사람이 적다).
+     * audienceOverridden이면 운영자가 범위를 고친 것이다.
+     */
+    public record ReviewNotice(long id, long articleNo, String category, String title, String shortTitle,
+            LocalDate postedOn, String url, String reviewReason, boolean hasImages, String attachments, String status,
+            String audienceScope, String audienceLabel, String audienceExcerpt, boolean audienceOverridden, int priority,
+            List<ItemsController.ItemView> items) {
+    }
+
+    /** closed는 사람이 볼 필요가 없어 큐에서 뺀 공지 수. PAST(날짜가 다 지남), RESULT(결과 발표), STALE(오래된 날짜 없는 글). */
+    public record ReviewQueue(List<ReviewNotice> notices, Map<String, Integer> closed) {
+    }
+
+    public record AudienceEdit(String scope, String label) {
     }
 
     public record ItemEdit(String title, LocalDate startsOn, LocalDate endsOn, LocalTime startsAt, LocalTime endsAt,
@@ -60,11 +82,63 @@ public class AdminController {
 
     @GetMapping("/review")
     @Transactional(readOnly = true)
-    public List<ReviewNotice> review(HttpServletRequest request) {
+    public ReviewQueue review(HttpServletRequest request) {
         auth.requireAdmin(request);
-        return notices.findByStatusOrderByPostedOnDesc(Notice.STATUS_NEEDS_REVIEW).stream()
-                .map(this::toReview)
-                .toList();
+        LocalDate today = LocalDate.now(clock);
+        Map<String, Integer> closed = new LinkedHashMap<>(Map.of(CLOSED_PAST, 0, CLOSED_RESULT, 0, CLOSED_STALE, 0));
+        List<ReviewNotice> queue = new java.util.ArrayList<>();
+        for (Notice n : notices.findByStatusOrderByPostedOnDesc(Notice.STATUS_NEEDS_REVIEW)) {
+            Audience audience = Audience.of(n);
+            List<DateItem> items = dateItems.findByNoticeIdOrderByEndsOnAsc(n.getId());
+            String reason = closedReason(n, audience, items, today);
+            if (reason != null) {
+                closed.merge(reason, 1, Integer::sum);
+            } else {
+                queue.add(toReview(n, audience, items));
+            }
+        }
+        queue.sort(Comparator.comparingInt(ReviewNotice::priority)
+                .thenComparing(r -> nextDeadline(r, today))
+                .thenComparing(ReviewNotice::postedOn, Comparator.reverseOrder()));
+        return new ReviewQueue(queue, closed);
+    }
+
+    static final String CLOSED_PAST = "PAST";
+    static final String CLOSED_RESULT = "RESULT";
+    static final String CLOSED_STALE = "STALE";
+
+    /**
+     * 검수할 필요가 없는 공지. 학생에게 나갈 날짜가 없으면 사람이 볼 이유도 없다.
+     * 날짜를 못 읽은 공지는 그림 속 날짜일 수 있어 30일, 글자만 있는 안내는 14일 동안 큐에 둔다.
+     */
+    static String closedReason(Notice n, Audience audience, List<DateItem> items, LocalDate today) {
+        if (Audience.RESULT.equals(audience.scope())) {
+            return CLOSED_RESULT;
+        }
+        if (!items.isEmpty()) {
+            return items.stream().allMatch(i -> i.getEndsOn().isBefore(today)) ? CLOSED_PAST : null;
+        }
+        int keepDays = Notice.REASON_NO_DATE.equals(n.getReviewReason()) ? 14 : 30;
+        return n.getPostedOn() != null && n.getPostedOn().isBefore(today.minusDays(keepDays)) ? CLOSED_STALE : null;
+    }
+
+    /** 날짜가 없는 공지(그림 속 날짜)는 사람이 넣기 전까지 학생에게 안 보이니 같은 등급 안에서 먼저 본다. */
+    private static LocalDate nextDeadline(ReviewNotice r, LocalDate today) {
+        return r.items().stream().map(ItemsController.ItemView::endsOn).filter(d -> !d.isBefore(today)).findFirst()
+                .orElse(LocalDate.MIN);
+    }
+
+    @PutMapping("/notices/{noticeId}/audience")
+    @Transactional
+    public ReviewNotice editAudience(HttpServletRequest request, @PathVariable long noticeId, @RequestBody AudienceEdit body) {
+        auth.requireAdmin(request);
+        String scope = body.scope() == null || body.scope().isBlank() ? null : body.scope();
+        if (scope != null && !Audience.SCOPES.contains(scope)) {
+            throw new IllegalArgumentException("범위는 " + String.join(", ", Audience.SCOPES) + " 중 하나");
+        }
+        Notice notice = notices.findById(noticeId).orElseThrow();
+        notice.overrideAudience(scope, body.label() == null || body.label().isBlank() ? null : body.label().trim());
+        return toReview(notice);
     }
 
     @GetMapping("/notices/{noticeId}")
@@ -123,10 +197,17 @@ public class AdminController {
     }
 
     private ReviewNotice toReview(Notice n) {
-        List<ItemsController.ItemView> items = dateItems.findByNoticeIdOrderByEndsOnAsc(n.getId()).stream()
+        return toReview(n, Audience.of(n), dateItems.findByNoticeIdOrderByEndsOnAsc(n.getId()));
+    }
+
+    private static ReviewNotice toReview(Notice n, Audience audience, List<DateItem> dateItemList) {
+        List<ItemsController.ItemView> items = dateItemList.stream()
                 .map(i -> ItemsController.toView(i, n, null, null, null, false))
                 .toList();
-        return new ReviewNotice(n.getId(), n.getArticleNo(), n.getCategory(), n.getTitle(), n.getPostedOn(), n.getUrl(),
-                n.getReviewReason(), n.isHasImages(), n.getAttachments(), n.getStatus(), items);
+        String shortTitle = Titles.clean(n.getTitle());
+        int priority = Feed.isMust(audience, shortTitle) ? 0 : Audience.GENERAL.equals(audience.scope()) ? 1 : 2;
+        return new ReviewNotice(n.getId(), n.getArticleNo(), n.getCategory(), n.getTitle(), shortTitle, n.getPostedOn(),
+                n.getUrl(), n.getReviewReason(), n.isHasImages(), n.getAttachments(), n.getStatus(), audience.scope(),
+                audience.label(), audience.excerpt(), n.getAudienceScope() != null, priority, items);
     }
 }
