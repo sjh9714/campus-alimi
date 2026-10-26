@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Tabs } from "./tabs";
+import { Header } from "./tabs";
 
 export const metadata: Metadata = {
   title: "캠퍼스 알리미",
@@ -20,8 +20,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body>
-        <main>{children}</main>
-        <Tabs />
+        <Header />
+        {children}
       </body>
     </html>
   );

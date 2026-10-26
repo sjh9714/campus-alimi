@@ -143,6 +143,9 @@ class CollectorsIntegrationTest {
         assertThat(dateItems.findByNaturalKey("schedule:2026:재학생 수강신청#1")).isPresent()
                 .get().satisfies(i -> assertThat(i.getStatus()).isEqualTo(DateItem.STATUS_REVIEWED));
         assertThat(dateItems.findByNaturalKey("schedule:2026:교수회의#1")).isEmpty();
+        // 교수가 성적을 내는 마감은 학생 일정이 아니다. 학생이 성적을 확인·정정하는 기간만 남긴다.
+        assertThat(dateItems.findByNaturalKey("schedule:2026:2학기 성적제출 마감#1")).isEmpty();
+        assertThat(dateItems.findByNaturalKey("schedule:2026:2학기 성적확인 및 오류정정#1")).isPresent();
         long stored = dateItems.countBySourceKind(DateItem.SOURCE_SCHEDULE);
         assertThat(stored).isEqualTo(first.kept());
 

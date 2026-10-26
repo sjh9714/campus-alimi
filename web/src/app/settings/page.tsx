@@ -66,12 +66,20 @@ export default function Settings() {
     setMsg(null);
   };
 
-  if (me === undefined && !error) return <p className="muted">불러오는 중...</p>;
+  if (me === undefined && !error)
+    return (
+      <main className="narrow">
+        <div className="empty">불러오는 중...</div>
+      </main>
+    );
 
   return (
-    <>
-      <h1>설정</h1>
-      {error && <div className="msg error">{error}</div>}
+    <main className="narrow">
+      <div className="page-head">
+        <h1>설정</h1>
+      </div>
+      <div className="panel">
+      {error && <div className="msg error" role="alert">{error}</div>}
       {msg && <div className="msg">{msg}</div>}
       {!me ? (
         <form onSubmit={requestLogin}>
@@ -129,6 +137,7 @@ export default function Settings() {
           <p className="muted">새 장학 공지, 저장한 항목 마감 3일 전, 체크한 혜택 만료 7일 전. 다음 단계에서 켜져요.</p>
         </>
       )}
-    </>
+      </div>
+    </main>
   );
 }

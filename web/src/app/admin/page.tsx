@@ -28,15 +28,17 @@ export default function Admin() {
   }, []);
 
   return (
-    <>
-      <h1>검수</h1>
-      <p className="muted">검수 전 공지 {queue?.length ?? 0}건. 날짜가 맞는지 보고, 학년·학과를 붙이고, 완료를 누르세요.</p>
-      {error && <div className="msg error">{error}</div>}
+    <main className="narrow" style={{ maxWidth: 960 }}>
+      <div className="page-head">
+        <h1>검수</h1>
+        <p className="sub">검수 전 공지 {queue?.length ?? 0}건. 날짜가 맞는지 보고, 학년·학과를 붙이고, 완료를 누르세요.</p>
+      </div>
+      {error && <div className="msg error" role="alert">{error}</div>}
       {queue?.map((n) => (
         <NoticeCard key={n.id} notice={n} onChange={load} onError={setError} />
       ))}
       {queue !== null && queue.length === 0 && <p className="muted">검수할 공지가 없어요.</p>}
-    </>
+    </main>
   );
 }
 
@@ -51,7 +53,7 @@ function NoticeCard({ notice, onChange, onError }: { notice: ReviewNotice; onCha
     }
   };
   return (
-    <div className="card">
+    <div className="panel" style={{ marginBottom: 14 }}>
       <div className="row between">
         <span className="badge accent">{notice.category}</span>
         <span className="muted">{notice.postedOn}</span>

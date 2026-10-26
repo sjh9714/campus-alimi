@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ScheduleStore {
 
     static final java.util.regex.Pattern RELEVANT = java.util.regex.Pattern.compile(
-            "수강|등록|휴학|복학|성적|장학|졸업|계절학기|납부|학위수여|개시일");
+            "수강|등록|휴학|복학|성적확인|오류정정|장학|졸업|계절학기|납부|학위수여|개시일");
 
     private final DateItemRepository dateItems;
 
