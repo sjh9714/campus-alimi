@@ -106,6 +106,24 @@ class CollectorsIntegrationTest {
                 dateItems.findAll().stream().filter(i -> i.getSourceKind().equals(DateItem.SOURCE_NOTICE)).count());
     }
 
+    @Autowired
+    com.campusalimi.benefit.BenefitSeeder benefitSeeder;
+    @Autowired
+    com.campusalimi.domain.BenefitRepository benefitRepository;
+
+    @Test
+    void benefitsAreSeededFromFileIdempotently() {
+        // 앱이 뜰 때 한 번 들어갔다. 다시 돌려도 바뀌는 것이 없어야 한다.
+        long count = benefitRepository.count();
+        assertThat(count).isGreaterThanOrEqualTo(15);
+        var again = benefitSeeder.seed(com.campusalimi.benefit.BenefitSeedFile.load());
+        assertThat(again.inserted()).isZero();
+        assertThat(again.updated()).isZero();
+        assertThat(benefitRepository.count()).isEqualTo(count);
+        assertThat(benefitRepository.findBySlug("spotify-student")).isPresent()
+                .get().satisfies(b -> assertThat(b.isStale(java.time.LocalDate.of(2026, 10, 26))).isFalse());
+    }
+
     @Test
     void scheduleIsIdempotent() {
         ScheduleCollector.Result first = scheduleCollector.collect(2026);

@@ -1,0 +1,183 @@
+# 학생 혜택 목록. 이 파일이 원본이다.
+#
+# 규칙 (ADR 003)
+# - 출처 페이지를 사람이 직접 열어 확인한 것만 적는다. 블로그·기사만 있는 것은 적지 않는다.
+# - verified_on 은 출처를 연 날이다. 90일이 지나면 화면에 "재확인 필요"가 붙는다.
+# - 가격·조건은 출처에 적힌 그대로. 출처에 없는 것은 적지 않는다.
+# - 2026-10-26 기준 확인했지만 넣지 않은 것: 청년도약계좌(신규 가입 종료 여부 공식 확인 못 함),
+#   청년월세 지원(복지로 공식 안내 못 찾음), KTX 힘내라 청춘(코레일 페이지 접근 불가),
+#   삼성 캠퍼스 스토어(페이지 접근 불가), 유튜브 프리미엄 학생(한국 미제공), Cursor 학생(현재 공식 혜택 없음).
+# - 범위는 대학생 자격으로 받는 것만이다. 나이(청년)만 보는 혜택은 넣지 않는다 (2026-10-26 결정).
+#   그래서 뺀 것: 기후동행카드 청년, K-패스, 청년 주택드림 청약통장, 청년문화예술패스.
+
+- slug: github-student-pack
+  name: GitHub Student Developer Pack
+  category: TOOL
+  summary: 재학 중 GitHub Pro, Copilot, Codespaces와 수십 개 개발 도구를 무료로
+  condition: 재학 중인 학생. GitHub 계정에서 학생 인증. Azure 같은 일부 혜택은 18세 이상
+  how_to: github.com/settings/education/benefits 에서 학교 메일이나 학생증으로 신청
+  source_name: GitHub Education
+  source_url: https://education.github.com/pack
+  verified_on: 2026-10-26
+  renewal_rule: 재학 중 유지. JetBrains 등 일부 혜택은 매년 갱신
+
+- slug: jetbrains-student
+  name: JetBrains 학생 라이선스
+  category: TOOL
+  summary: IntelliJ IDEA Ultimate 등 JetBrains 전 제품 무료
+  condition: 학생·교사. 상업 작업에는 쓸 수 없음. 졸업 후 2년간 개인 구독 40% 할인
+  how_to: jetbrains.com/shop/eform/students 에서 학교 메일이나 GitHub Student Pack으로 신청
+  source_name: JetBrains 고객지원
+  source_url: https://sales.jetbrains.com/hc/en-gb/articles/207241195-Do-you-offer-free-educational-licenses-for-students-and-teachers
+  verified_on: 2026-10-26
+  renewal_rule: 매년 갱신 (GitHub Student Pack 안내 기준)
+
+- slug: notion-education
+  name: Notion Education Plan
+  category: TOOL
+  summary: 개인 워크스페이스 무제한 페이지와 30일 버전 기록을 무료로
+  condition: 인가 대학의 학생·교직원. 학교 메일이 계정의 기본 메일이어야 함. 학생증은 안 됨
+  how_to: 설정 > 요금제 업그레이드 > Get free education plan. 학교 메일 한 개당 한 번
+  source_name: Notion
+  source_url: https://www.notion.com/product/notion-for-education
+  verified_on: 2026-10-26
+  renewal_rule: 매년 학교 메일 재인증. 기념일 전에 Notion이 알림
+
+- slug: figma-education
+  name: Figma Education
+  category: TOOL
+  summary: Figma·FigJam Professional 무료, AI 기능 포함
+  condition: 13세 이상 학생·교육자. 대학·부트캠프·온라인 과정 포함
+  how_to: figma.com/education/apply 에서 교육 상태 인증 후 Education 팀 생성
+  source_name: Figma
+  source_url: https://www.figma.com/education/
+  verified_on: 2026-10-26
+  renewal_rule: 기간은 페이지에 명시 없음. 교육 상태가 끝나면 종료
+
+- slug: microsoft-365-education
+  name: Microsoft 365 Education (A1)
+  category: TOOL
+  summary: 웹용 Word·Excel·PowerPoint·OneNote·Outlook 무료
+  condition: 적격 교육기관의 학교 메일. 대부분 즉시 승인, 학교 확인이 필요하면 최대 1개월
+  how_to: microsoft.com/ko-kr/education/products/office 에서 학교 메일로 시작
+  source_name: Microsoft
+  source_url: https://www.microsoft.com/ko-kr/education/products/office
+  verified_on: 2026-10-26
+  renewal_rule: 재학 중 유지. 자격 재확인 가능. 만료 시 보기 전용으로 전환
+
+- slug: google-ai-plus-student
+  name: Google AI Plus 학생 요금제
+  category: TOOL
+  summary: Google AI Plus 1년 무료. 이후 월 7,500원 자동 청구
+  condition: 만 18세 이상 대학생. 2025년 AI Pro 체험을 받았던 학생도 가능. 결제 수단 등록 필요
+  how_to: gemini.google/kr/students 에서 학생 인증. 무료 기간 끝나기 전에 취소하면 과금 없음
+  price: 1년 무료, 이후 월 7,500원
+  source_name: Google
+  source_url: https://gemini.google/kr/students/?hl=ko
+  verified_on: 2026-10-26
+  renewal_rule: 매년 자격 확인. 페이지에 "2026년 12월 31일까지 사용하세요"로 적힘
+  ends_on: 2026-12-31
+
+- slug: spotify-student
+  name: Spotify Premium 학생
+  category: SUBSCRIPTION
+  summary: 프리미엄 월 6,600원 (일반 11,990원), 첫 달 무료
+  condition: 만 18세 이상, 프로그램에 포함된 대학 재학생. 프리미엄을 써 본 적 없어야 함
+  how_to: spotify.com/kr-ko/student 에서 SheerID로 재학 인증
+  price: 월 6,600원 (부가세 포함)
+  source_name: Spotify
+  source_url: https://www.spotify.com/kr-ko/student/
+  verified_on: 2026-10-26
+  renewal_rule: 최대 4년. 졸업·자퇴 후에는 마지막 인증일부터 12개월 뒤 일반 요금제로 전환
+
+- slug: apple-music-student
+  name: Apple Music 학생
+  category: SUBSCRIPTION
+  summary: Apple Music 월 4,400원 또는 연 44,000원 (일반 8,900원)
+  condition: 자격을 인증한 대학생·교육자 본인만. 신규 구독자 한정. 가족 공유 불가
+  how_to: Apple 교육 스토어 안내에 따라 재학 인증 후 구독
+  price: 월 4,400원 또는 연 44,000원
+  source_name: Apple 교육 스토어
+  source_url: https://www.apple.com/kr-edu/store
+  verified_on: 2026-10-26
+  renewal_rule: 취소 전까지 자동 갱신. 기간 한정 혜택이라 언제든 종료될 수 있음
+
+- slug: apple-edu-store
+  name: Apple 교육 할인
+  category: SUBSCRIPTION
+  summary: 맥·아이패드 등을 교육 할인가로. 할인율은 제품마다 다름
+  condition: 대학 재학생, 신입생, 교직원. 할부는 국내 발급 카드와 국내 거주자만
+  how_to: apple.com/kr-edu/store 에서 자격 확인 후 구매
+  source_name: Apple 교육 스토어
+  source_url: https://www.apple.com/kr-edu/store
+  verified_on: 2026-10-26
+  renewal_rule: 재학 중 이용. 구매 시마다 자격 확인
+
+- slug: adobe-cc-student
+  name: Adobe Creative Cloud 학생
+  category: SUBSCRIPTION
+  summary: 포토샵·일러스트레이터 등 20개 이상 앱, 첫해 월 26,400원 (정가 78,100원)
+  condition: 13세 이상 재학생. 구독 결제는 18세 이상 신용카드. 학교 메일이나 재학 증빙 필요
+  how_to: adobe.com/kr/creativecloud/buy/students.html 에서 학생 인증 후 연간 플랜 구독
+  price: 첫해 월 26,400원, 이후 월 47,300원
+  source_name: Adobe
+  source_url: https://www.adobe.com/kr/creativecloud/buy/students.html
+  verified_on: 2026-10-26
+  renewal_rule: 1년 뒤 요금 인상. 매 학년도 재학 증빙 요청 가능
+
+- slug: kosaf-student-loan
+  name: 한국장학재단 학자금대출 (2026년 2학기)
+  category: SCHOLARSHIP
+  summary: 2학기 등록금·생활비 대출 신청 11월 17일까지
+  condition: 재학생. 취업 후 상환 생활비 대출은 등록 마감 약 8주 전 신청 권장
+  how_to: kosaf.go.kr 또는 한국장학재단 앱에서 신청
+  source_name: 한국장학재단
+  source_url: https://www.kosaf.go.kr/ko/main.do
+  verified_on: 2026-10-26
+  renewal_rule: 매 학기 신청. 2026년 2학기는 7월 1일부터 11월 17일까지
+  ends_on: 2026-11-17
+
+- slug: kosaf-work-scholarship-2026-2
+  name: 국가근로장학금 2학기 추가 신청
+  category: SCHOLARSHIP
+  summary: 2026년 2학기 국가근로장학금 추가 신청 10월 29일까지
+  condition: 한국장학재단 공지와 학교 공지 기준. 동계방학 집중근로 포함
+  how_to: 한국장학재단에서 10월 21일부터 29일까지 신청. 재단 희망근로지 신청은 10월 30일부터 11월 12일까지
+  source_name: 가톨릭대 공지 (한국장학재단 안내)
+  source_url: https://www.catholic.ac.kr/ko/campuslife/notice.do?mode=view&articleNo=276686
+  verified_on: 2026-10-26
+  renewal_rule: 학기마다 신청 기간이 다름. 다음 학기는 공지로 갱신
+  ends_on: 2026-10-29
+
+- slug: kosaf-national-scholarship
+  name: 국가장학금
+  category: SCHOLARSHIP
+  summary: 매 학기 1차·2차 신청. 교내 장학금을 받으려면 1차 신청이 필요한 경우가 많음
+  condition: 재학생·입학 예정자. 학자금 지원구간 산정 체계는 2027년 1학기부터 개편
+  how_to: kosaf.go.kr 에서 신청. 2027년 1학기 1차 일정은 2026년 10월 26일 기준 미공고
+  source_name: 한국장학재단
+  source_url: https://www.kosaf.go.kr/ko/scholar.do?pg=scholarship_main&naviParam=JH,00,00,00
+  verified_on: 2026-10-26
+  renewal_rule: 학기마다 신청. 공고가 나오면 날짜 항목으로 등록
+
+- slug: cuk-scholarship-guide
+  name: 가톨릭대 성심교정 장학제도
+  category: SCHOOL
+  summary: 교내 등록금성·생활비성 장학과 교외 장학의 종류와 신청 시기
+  condition: 정규학기 재학생. 교내장학은 직전 학기 상담 1회 필요
+  how_to: 근로·인턴십은 학기 초(3월·9월)와 학기 말, 가족장학은 4월·10월, 고시장학은 6월·12월. 공지로 확인
+  source_name: 가톨릭대학교
+  source_url: https://www.catholic.ac.kr/ko/support/scholarship_songsim.do
+  verified_on: 2026-10-26
+  renewal_rule: 학교 페이지 최종 수정 2025년 12월 26일. 학기마다 공지 확인
+
+- slug: cuk-tuition-refund
+  name: 가톨릭대 등록금 납부와 반환 규정
+  category: SCHOOL
+  summary: 휴학·자퇴 시 개시일 30일 이내 5/6, 60일 이내 2/3, 90일 이내 1/2 반환
+  condition: 재학생. 휴학은 추가등록기간 종료일까지 전액 반환. 90일 경과 후에는 반환 없음
+  how_to: 우리·국민은행 가상계좌, 은행 창구, 삼성카드, 학자금대출로 납부. 평일 09시부터 16시
+  source_name: 가톨릭대학교
+  source_url: https://www.catholic.ac.kr/ko/support/tuition_payment_and_returning.do
+  verified_on: 2026-10-26
+  renewal_rule: 학교 페이지 최종 수정 2026년 9월 9일
