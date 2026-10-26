@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: campus-alimi
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/campusalimi}
+    username: ${DB_USER:campusalimi}
+    password: ${DB_PASSWORD:campusalimi}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+server:
+  port: ${PORT:8080}
+
+app:
+  base-url: https://www.catholic.ac.kr
+  fetch-interval-ms: 1500
+  run-once: ${RUN_ONCE:}
+  schedule:
+    cron: "0 0 6 * * *"
+    campus: 성심
+    years: ${SCHEDULE_YEARS:2026,2027}
+  notice:
+    cron: "0 7 * * * *"
+    page-size: 30
+    categories:
+      - name: 학사
+        id: 21
+      - name: 장학
+        id: 22

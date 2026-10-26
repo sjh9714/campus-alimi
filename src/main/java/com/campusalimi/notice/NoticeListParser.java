@@ -1,0 +1,47 @@
+package com.campusalimi.notice;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
+/** 공지 목록 페이지를 읽는다. 상단 고정 공지는 본문 목록에도 다시 나오므로 글 번호로 한 번만 남긴다. */
+public final class NoticeListParser {
+
+    private static final Pattern DATE = Pattern.compile("(20\\d{2})\\.(\\d{2})\\.(\\d{2})");
+    private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
+
+    private NoticeListParser() {
+    }
+
+    public static List<NoticeSummary> parse(String html) {
+        Document doc = Jsoup.parse(html);
+        Set<Long> seen = new LinkedHashSet<>();
+        List<NoticeSummary> result = new ArrayList<>();
+        for (Element row : doc.select("tbody > tr")) {
+            Element link = row.selectFirst("a.b-title[data-article-no]");
+            if (link == null) {
+                continue;
+            }
+            long articleNo = Long.parseLong(link.attr("data-article-no"));
+            if (!seen.add(articleNo)) {
+                continue;
+            }
+            String category = row.select("td").size() > 1 ? row.select("td").get(1).text().trim() : "";
+            Matcher m = DATE.matcher(row.text());
+            if (!m.find()) {
+                continue;
+            }
+            LocalDate postedOn = LocalDate.parse(m.group(), FORMAT);
+            result.add(new NoticeSummary(articleNo, category, link.text().trim(), postedOn));
+        }
+        return result;
+    }
+}

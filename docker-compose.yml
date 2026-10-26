@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: campusalimi-postgres
+    environment:
+      POSTGRES_DB: campusalimi
+      POSTGRES_USER: campusalimi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-campusalimi}
+    ports:
+      - "5432:5432"
+    volumes:
+      - campusalimi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campusalimi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  campusalimi_pgdata:

@@ -1,0 +1,241 @@
+package com.campusalimi.notice;
+
+import com.campusalimi.dateparse.DateRange;
+import com.campusalimi.dateparse.KoreanDateParser;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.jsoup.nodes.Element;
+
+/**
+ * 공지 한 건에서 날짜 항목을 뽑는다. 세 곳을 순서대로 본다.
+ *
+ * <ol>
+ * <li>제목. 장학 공지는 "(10. 14.(수) ~ 11. 13.(금))"처럼 제목에 기간을 적는 경우가 많다.</li>
+ * <li>표. 수강신청 일정처럼 구분·학년·일정 열로 된 표는 행마다 항목이 된다. rowspan으로 묶인 라벨은 아래 행에도 붙인다.</li>
+ * <li>문단. 제목과 표에서 아무것도 못 찾았을 때만, "기간", "마감", "신청" 같은 말이 있는 줄에서 읽는다.</li>
+ * </ol>
+ *
+ * 못 읽으면 빈 목록을 돌려준다. 추측하지 않는다.
+ */
+public final class DateItemExtractor {
+
+    private static final Pattern GRADE = Pattern.compile("([1-4])\\s*학년");
+    private static final Pattern ALL_GRADES = Pattern.compile("전체\\s*학년|전\\s*학년");
+    private static final Pattern LINE_KEYWORD = Pattern.compile("신청|접수|제출|마감|기간|까지|모집|납부|등록");
+    private static final int TITLE_LIMIT = 80;
+
+    private DateItemExtractor() {
+    }
+
+    public static List<ExtractedItem> extract(NoticeView view) {
+        KoreanDateParser parser = new KoreanDateParser(view.postedOn());
+        List<ExtractedItem> items = new ArrayList<>();
+        String cleanTitle = view.cleanTitle();
+
+        // 제목의 날짜는 "(10. 14. ~ 11. 13.)"처럼 기간이거나 "(~10.26)"처럼 마감일일 때만 믿는다.
+        // "<2026.09.04. 업데이트>" 같은 단일 날짜는 마감이 아니다.
+        for (DateRange r : parser.parse(view.title())) {
+            if (r.start() == null || !r.isSingleDay() || view.title().contains("까지")) {
+                items.add(new ExtractedItem(cleanTitle, r, gradeOf(view.title()), "title"));
+            }
+        }
+
+        int tableIndex = 0;
+        for (Element table : view.body().select("table")) {
+            tableIndex++;
+            items.addAll(fromTable(table, parser, cleanTitle, "table" + tableIndex));
+        }
+
+        if (items.isEmpty()) {
+            items.addAll(fromLines(view, parser, cleanTitle));
+        }
+        return dedupe(items);
+    }
+
+    private static List<ExtractedItem> fromTable(Element table, KoreanDateParser parser, String fallbackTitle,
+            String where) {
+        List<ExtractedItem> items = new ArrayList<>();
+        Map<Integer, Carry> carry = new HashMap<>();
+        List<String> header = null;
+        int rowIndex = 0;
+        for (Element tr : table.select("tr")) {
+            rowIndex++;
+            List<String> cells = new ArrayList<>();
+            int col = 0;
+            for (Element td : tr.select("> td, > th")) {
+                while (carry.containsKey(col)) {
+                    cells.add(carry.get(col).text);
+                    if (--carry.get(col).remaining == 0) {
+                        carry.remove(col);
+                    }
+                    col++;
+                }
+                String text = td.text().trim();
+                cells.add(text);
+                int rowspan = parseInt(td.attr("rowspan"));
+                if (rowspan > 1) {
+                    carry.put(col, new Carry(text, rowspan - 1));
+                }
+                col++;
+            }
+            while (carry.containsKey(col)) {
+                cells.add(carry.get(col).text);
+                if (--carry.get(col).remaining == 0) {
+                    carry.remove(col);
+                }
+                col++;
+            }
+
+            List<String> labels = new ArrayList<>();
+            List<DateRange> ranges = new ArrayList<>();
+            int firstDateCol = -1;
+            for (int c = 0; c < cells.size(); c++) {
+                String cell = cells.get(c);
+                List<DateRange> found = parser.parse(cell);
+                if (found.isEmpty()) {
+                    String label = cleanLabel(cell);
+                    if (!label.isEmpty()) {
+                        labels.add(label);
+                    }
+                } else {
+                    if (firstDateCol < 0) {
+                        firstDateCol = c;
+                    }
+                    ranges.addAll(found);
+                }
+            }
+            if (ranges.isEmpty()) {
+                // 날짜 없는 첫 행은 머리글이다. "일반휴학원 제출 마감일 | 비고"처럼 날짜 열 이름이 곧 제목인 표가 있다.
+                if (header == null && !cells.isEmpty()) {
+                    header = cells.stream().map(DateItemExtractor::cleanLabel).toList();
+                }
+                continue;
+            }
+            DateRange merged = merge(ranges);
+            if (firstDateCol == 0 && header != null && !header.isEmpty() && !header.get(0).isEmpty()) {
+                labels.add(0, header.get(0));
+            }
+            String labelText = String.join(" · ", labels);
+            String title = labelText.isEmpty() ? fallbackTitle : clip(labelText);
+            items.add(new ExtractedItem(title, merged, gradeOf(labelText), where + ".r" + rowIndex));
+        }
+        return items;
+    }
+
+    private static List<ExtractedItem> fromLines(NoticeView view, KoreanDateParser parser, String fallbackTitle) {
+        List<ExtractedItem> items = new ArrayList<>();
+        int lineIndex = 0;
+        for (Element e : view.body().select("p, li")) {
+            if (!e.select("p, li").isEmpty() && e.children().stream().anyMatch(c -> c.is("p, li"))) {
+                continue;
+            }
+            String line = e.text().trim();
+            lineIndex++;
+            if (line.isEmpty() || !LINE_KEYWORD.matcher(line).find()) {
+                continue;
+            }
+            List<DateRange> ranges = parser.parse(line);
+            if (ranges.isEmpty()) {
+                continue;
+            }
+            DateRange merged = merge(ranges);
+            int cut = line.indexOf(merged.matchedText().replaceFirst("^~", ""));
+            String lead = cleanLabel(cut > 0 ? line.substring(0, cut) : "");
+            lead = lead.replaceAll("[\\s:：\\-–—·~∼〜～(\\[]+$", "").trim();
+            // 날짜 앞의 글이 "접수기간", "원본서류 제출"처럼 짧고 그 안에 핵심어가 있을 때만 항목으로 본다.
+            // "학생 본인, 부 또는 모 중 1명 이상이 ... 거주" 같은 자격 조건의 날짜는 마감이 아니다.
+            if (lead.length() < 2 || lead.length() > 40 || !LINE_KEYWORD.matcher(lead).find()) {
+                continue;
+            }
+            items.add(new ExtractedItem(lead, merged, gradeOf(line), "line" + lineIndex));
+        }
+        return items;
+    }
+
+    /** 한 칸에 날짜가 여럿이면(변경기간 2차처럼 날마다 한 줄) 처음부터 끝까지 한 기간으로 합친다. */
+    private static DateRange merge(List<DateRange> ranges) {
+        if (ranges.size() == 1) {
+            return ranges.get(0);
+        }
+        LocalDate start = null;
+        LocalDate end = null;
+        for (DateRange r : ranges) {
+            if (r.start() != null && (start == null || r.start().isBefore(start))) {
+                start = r.start();
+            }
+            if (end == null || r.end().isAfter(end)) {
+                end = r.end();
+            }
+        }
+        DateRange first = ranges.get(0);
+        DateRange last = ranges.get(ranges.size() - 1);
+        return new DateRange(start, end, first.startsAt(), last.endsAt() != null ? last.endsAt() : first.endsAt(),
+                first.matchedText());
+    }
+
+    private static List<ExtractedItem> dedupe(List<ExtractedItem> items) {
+        Set<String> seen = new LinkedHashSet<>();
+        List<ExtractedItem> out = new ArrayList<>();
+        for (ExtractedItem item : items) {
+            String key = item.title() + "|" + item.range().start() + "|" + item.range().end();
+            if (seen.add(key)) {
+                out.add(item);
+            }
+        }
+        return out;
+    }
+
+    static String gradeOf(String text) {
+        if (text == null) {
+            return null;
+        }
+        if (ALL_GRADES.matcher(text).find()) {
+            return "ALL";
+        }
+        // "4학년 (약대 4학년 이상)" 처럼 같은 학년이 두 번 나오면 그 학년, 다른 학년이 섞이면 모름.
+        Set<String> grades = new LinkedHashSet<>();
+        Matcher m = GRADE.matcher(text);
+        while (m.find()) {
+            grades.add(m.group(1));
+        }
+        return grades.size() == 1 ? grades.iterator().next() : null;
+    }
+
+    /** 라벨에서 주소, 글머리표, "1." "가." 같은 번호를 뗀다. */
+    static String cleanLabel(String s) {
+        String t = s.replaceAll("https?://\\S+", " ");
+        t = t.replaceFirst("^[\\s\\-–—·※▶▷•○●■□◦‣▪◆◇☞✔]+", "");
+        t = t.replaceFirst("^(\\d{1,2}|[가-힣]|[①-⑳]|[a-zA-Z])\\s*[.)]\\s*", "");
+        t = t.replaceFirst("^[\\s\\-–—·※▶▷•○●■□◦‣▪◆◇☞✔]+", "");
+        return t.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String clip(String s) {
+        return s.length() <= TITLE_LIMIT ? s : s.substring(0, TITLE_LIMIT - 1) + "…";
+    }
+
+    private static int parseInt(String s) {
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return 1;
+        }
+    }
+
+    private static final class Carry {
+        final String text;
+        int remaining;
+
+        Carry(String text, int remaining) {
+            this.text = text;
+            this.remaining = remaining;
+        }
+    }
+}

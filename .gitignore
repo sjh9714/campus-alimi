@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+build/
+.gradle/
+node_modules/
+.next/
+out/
+.DS_Store
+*.log

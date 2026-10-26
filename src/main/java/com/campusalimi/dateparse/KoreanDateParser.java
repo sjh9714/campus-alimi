@@ -1,0 +1,185 @@
+package com.campusalimi.dateparse;
+
+import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * 학교 공지에 흔한 한국어 날짜 표기를 읽는다.
+ *
+ * <p>읽는 것: "2026. 7. 7.(화) ~ 7. 12.(일) / 09:00 ~ 23:59", "10. 14.(수) ~ 11. 13.(금) 18:00까지",
+ * "(~10.26)", "(10/21~10/29)", "2026년 10월 30일", "2026-10-30".
+ *
+ * <p>읽지 않는 것: 연도 없는 월.일 표기에 요일도 "일"도 없고 "~"로 짝도 없는 것("수업일수 1/4", "3.0 이상").
+ * 추측하느니 비워 두고 검수로 보내는 편이 낫다. 연도가 없으면 게시일 기준으로 가장 가까운 앞날을 고른다.
+ */
+public final class KoreanDateParser {
+
+    private static final String FULL = "(20\\d{2})\\s*[.\\-/년]\\s*(\\d{1,2})\\s*[.\\-/월]\\s*(\\d{1,2})\\s*\\.?\\s*일?";
+    private static final String MD = "(\\d{1,2})\\s*([./월])\\s*(\\d{1,2})\\s*\\.?\\s*(일)?";
+    private static final String WEEKDAY = "(\\(\\s*[월화수목금토일]\\s*\\))?";
+    private static final String TIME = "(?:\\s*/?\\s*(\\d{1,2}):(\\d{2})(?:\\s*[~∼〜～\\-–]\\s*(\\d{1,2}):(\\d{2}))?)?";
+
+    private static final Pattern TOKEN = Pattern.compile(
+            "(?<![\\d:])(?:" + FULL + "|" + MD + ")\\s*" + WEEKDAY + TIME);
+    private static final Pattern CONNECTOR = Pattern.compile("^\\s*(?:[~∼〜～\\-–—]|부터)\\s*$");
+    private static final Pattern LEADING_TILDE = Pattern.compile("[~∼〜～]\\s*$");
+
+    private final LocalDate baseDate;
+
+    /** @param baseDate 연도가 적히지 않은 날짜를 어느 해로 볼지 정하는 기준. 보통 공지 게시일. */
+    public KoreanDateParser(LocalDate baseDate) {
+        this.baseDate = baseDate;
+    }
+
+    public List<DateRange> parse(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        List<Token> tokens = tokenize(text);
+        List<DateRange> ranges = new ArrayList<>();
+        int i = 0;
+        while (i < tokens.size()) {
+            Token t = tokens.get(i);
+            if (i + 1 < tokens.size()) {
+                Token next = tokens.get(i + 1);
+                String between = text.substring(t.end, next.start);
+                if (CONNECTOR.matcher(between).matches()) {
+                    DateRange range = buildRange(t, next, text);
+                    if (range != null) {
+                        ranges.add(range);
+                    }
+                    i += 2;
+                    continue;
+                }
+            }
+            String before = text.substring(Math.max(0, t.start - 4), t.start);
+            boolean endOnly = LEADING_TILDE.matcher(before).find();
+            DateRange single = buildSingle(t, endOnly, text);
+            if (single != null) {
+                ranges.add(single);
+            }
+            i++;
+        }
+        return ranges;
+    }
+
+    private DateRange buildRange(Token a, Token b, String text) {
+        Integer year = a.year != null ? a.year : b.year;
+        LocalDate start = resolve(a, year);
+        if (start == null) {
+            return null;
+        }
+        LocalDate end = b.year != null ? resolve(b, b.year) : resolve(b, start.getYear());
+        if (end == null) {
+            return null;
+        }
+        if (end.isBefore(start)) {
+            end = end.plusYears(1);
+        }
+        // "7. 7.(화) ~ 7. 12.(일) / 09:00 ~ 23:59" 처럼 시간이 뒤쪽 날짜에만 붙는 경우가 흔하다.
+        LocalTime startsAt;
+        LocalTime endsAt;
+        if (a.time1 != null) {
+            startsAt = a.time1;
+            endsAt = b.time2 != null ? b.time2 : (b.time1 != null ? b.time1 : a.time2);
+        } else if (b.time2 != null) {
+            startsAt = b.time1;
+            endsAt = b.time2;
+        } else {
+            startsAt = null;
+            endsAt = b.time1;
+        }
+        return new DateRange(start, end, startsAt, endsAt, text.substring(a.start, b.end).trim());
+    }
+
+    private DateRange buildSingle(Token t, boolean endOnly, String text) {
+        // "(~10.26)" 처럼 물결이 앞에 붙은 월.일은 마감일로 적은 것이라 요일이 없어도 믿는다.
+        if (!t.selfSufficient() && !endOnly) {
+            return null;
+        }
+        LocalDate day = resolve(t, t.year);
+        if (day == null) {
+            return null;
+        }
+        String matched = text.substring(t.start, t.end).trim();
+        if (endOnly) {
+            return new DateRange(null, day, null, t.time1, "~" + matched);
+        }
+        return new DateRange(day, day, t.time1, t.time2, matched);
+    }
+
+    private LocalDate resolve(Token t, Integer explicitYear) {
+        try {
+            if (explicitYear != null) {
+                return LocalDate.of(explicitYear, t.month, t.day);
+            }
+            LocalDate candidate = LocalDate.of(baseDate.getYear(), t.month, t.day);
+            if (candidate.isBefore(baseDate.minusDays(60))) {
+                candidate = candidate.plusYears(1);
+            }
+            return candidate;
+        } catch (DateTimeException e) {
+            return null;
+        }
+    }
+
+    private static List<Token> tokenize(String text) {
+        List<Token> tokens = new ArrayList<>();
+        Matcher m = TOKEN.matcher(text);
+        while (m.find()) {
+            Token t = new Token();
+            t.start = m.start();
+            t.end = m.end();
+            if (m.group(1) != null) {
+                t.year = Integer.parseInt(m.group(1));
+                t.month = Integer.parseInt(m.group(2));
+                t.day = Integer.parseInt(m.group(3));
+            } else {
+                t.month = Integer.parseInt(m.group(4));
+                t.day = Integer.parseInt(m.group(6));
+                t.hasDaySuffix = m.group(7) != null;
+            }
+            t.hasWeekday = m.group(8) != null;
+            t.time1 = time(m.group(9), m.group(10));
+            t.time2 = time(m.group(11), m.group(12));
+            if (t.month < 1 || t.month > 12 || t.day < 1 || t.day > 31) {
+                continue;
+            }
+            tokens.add(t);
+        }
+        return tokens;
+    }
+
+    private static LocalTime time(String h, String min) {
+        if (h == null) {
+            return null;
+        }
+        try {
+            return LocalTime.of(Integer.parseInt(h), Integer.parseInt(min));
+        } catch (DateTimeException e) {
+            return null;
+        }
+    }
+
+    private static final class Token {
+        int start;
+        int end;
+        Integer year;
+        int month;
+        int day;
+        boolean hasWeekday;
+        boolean hasDaySuffix;
+        LocalTime time1;
+        LocalTime time2;
+
+        /** 혼자서도 날짜로 믿을 만한가. 연도가 있거나, 요일이 붙었거나, "일"로 끝나면 그렇다. */
+        boolean selfSufficient() {
+            return year != null || hasWeekday || hasDaySuffix;
+        }
+    }
+}
