@@ -1,3 +1,5 @@
+import { ChevronIcon } from "./icons";
+
 /** 월 달력. 마감이 있는 날에 점을 찍고, 날짜를 누르면 그날 마감만 보게 한다. */
 export function MonthCalendar({
   month,
@@ -30,13 +32,13 @@ export function MonthCalendar({
     <div className="calendar">
       <div className="head">
         <button className="ghost nav-btn" onClick={() => onMonth(new Date(y, m - 1, 1))} aria-label="이전 달">
-          ‹
+          <ChevronIcon dir="left" />
         </button>
         <strong>
           {y}년 {m + 1}월
         </strong>
         <button className="ghost nav-btn" onClick={() => onMonth(new Date(y, m + 1, 1))} aria-label="다음 달">
-          ›
+          <ChevronIcon dir="right" />
         </button>
       </div>
       <table>

@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ApiError, api, formatRange, type Item, type ItemEdit, type ReviewNotice } from "@/lib/api";
+import {
+  ApiError,
+  api,
+  formatRange,
+  type Item,
+  type ItemEdit,
+  type ReviewNotice,
+  type ReviewQueue,
+  type Scope,
+} from "@/lib/api";
+import { ChevronIcon, ExternalIcon, PlusIcon } from "../icons";
 
 type Reason = ReviewNotice["reviewReason"];
 
@@ -26,8 +36,18 @@ const REASON_TONE: Record<Reason, string> = {
   PARSE_FAILED: "urgent",
 };
 
+const PRIORITY_LABEL = ["모든 재학생 대상", "일반 공지", "지역·특정 대상"] as const;
+
+const SCOPE_LABEL: Record<Scope, string> = {
+  GENERAL: "일반",
+  REGION: "지역 연고",
+  GROUP: "특정 계층",
+  FIELD: "특정 분야",
+  RESULT: "결과 발표 (학생 화면에서 뺌)",
+};
+
 export default function Admin() {
-  const [queue, setQueue] = useState<ReviewNotice[] | null>(null);
+  const [queue, setQueue] = useState<ReviewQueue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [filter, setFilter] = useState<Reason | "ALL">("ALL");
@@ -39,7 +59,7 @@ export default function Admin() {
       .then((q) => {
         setQueue(q);
         setError(null);
-        setSelected((cur) => (cur !== null && q.some((n) => n.id === cur) ? cur : null));
+        setSelected((cur) => (cur !== null && q.notices.some((n) => n.id === cur) ? cur : null));
       })
       .catch((e) => {
         if (e instanceof ApiError && (e.status === 401 || e.status === 403)) setForbidden(true);
@@ -50,18 +70,20 @@ export default function Admin() {
     load();
   }, []);
 
+  const notices = queue?.notices ?? [];
   const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: queue?.length ?? 0 };
-    (queue ?? []).forEach((n) => (c[n.reviewReason] = (c[n.reviewReason] ?? 0) + 1));
+    const c: Record<string, number> = { ALL: notices.length };
+    notices.forEach((n) => (c[n.reviewReason] = (c[n.reviewReason] ?? 0) + 1));
     return c;
-  }, [queue]);
+  }, [notices]);
 
-  const list = (queue ?? []).filter((n) => filter === "ALL" || n.reviewReason === filter);
-  const current = (queue ?? []).find((n) => n.id === selected) ?? null;
+  const list = notices.filter((n) => filter === "ALL" || n.reviewReason === filter);
+  const current = notices.find((n) => n.id === selected) ?? null;
+  const closedTotal = queue ? queue.closed.PAST + queue.closed.RESULT + queue.closed.STALE : 0;
 
   if (forbidden) {
     return (
-      <main className="narrow">
+      <main id="main" className="narrow">
         <div className="page-head">
           <h1>검수</h1>
         </div>
@@ -71,11 +93,19 @@ export default function Admin() {
   }
 
   return (
-    <main>
+    <main id="main">
       <div className="page-head">
         <h1>검수</h1>
         <p className="sub">
-          검수 전 공지 {counts.ALL}건. 날짜가 맞는지 보고, 학년·학과를 붙이고, 검수 완료를 누르세요.
+          볼 공지 {notices.length}건. 위에서부터 보세요. 모든 재학생이 보는 공지가 먼저, 그림에만 날짜가 있어 학생 화면에
+          아직 안 나가는 공지가 그다음이에요.
+          {queue && closedTotal > 0 && (
+            <>
+              {" "}
+              자동 정리 {closedTotal}건 (마감 지남 {queue.closed.PAST}, 결과 발표 {queue.closed.RESULT}, 날짜 없는 지난 안내{" "}
+              {queue.closed.STALE}).
+            </>
+          )}
         </p>
       </div>
       {error && (
@@ -84,42 +114,54 @@ export default function Admin() {
         </div>
       )}
 
-      <div className="chips" style={{ display: "flex" }} role="group" aria-label="검수 사유 필터">
+      <div className="segmented wrap" role="group" aria-label="검수 사유 필터">
         {(["ALL", "PARSED", "IMAGE_ONLY", "NO_DATE", "PARSE_FAILED"] as const).map((r) => (
-          <button key={r} className="chip" aria-pressed={filter === r} onClick={() => setFilter(r)}>
-            {r === "ALL" ? "전체" : REASON_LABEL[r]} {counts[r] ?? 0}
+          <button key={r} aria-pressed={filter === r} onClick={() => setFilter(r)}>
+            {r === "ALL" ? "전체" : REASON_LABEL[r]} <span className="n">{counts[r] ?? 0}</span>
           </button>
         ))}
       </div>
 
       {queue === null && !error ? (
-        <div className="empty">불러오는 중...</div>
-      ) : queue && queue.length === 0 ? (
+        <div className="empty">불러오는 중…</div>
+      ) : notices.length === 0 ? (
         <div className="empty">검수할 공지가 없어요.</div>
       ) : (
         <div className={`review ${current ? "has-detail" : ""}`}>
-          <ul className="review-list" aria-label="검수 전 공지">
-            {list.map((n) => (
-              <li key={n.id}>
-                <button
-                  className={`review-row ${n.id === selected ? "selected" : ""}`}
-                  aria-current={n.id === selected}
-                  onClick={() => setSelected(n.id)}
-                >
-                  <span className="row" style={{ gap: 6 }}>
-                    <span className="badge accent">{n.category}</span>
-                    <span className={`badge ${REASON_TONE[n.reviewReason]}`}>{REASON_LABEL[n.reviewReason]}</span>
-                    <span className="muted" style={{ marginLeft: "auto" }}>
-                      {n.postedOn}
-                    </span>
-                  </span>
-                  <span className="review-title">{n.title}</span>
-                  {n.items.length > 0 && <span className="muted">날짜 항목 {n.items.length}개</span>}
-                </button>
-              </li>
-            ))}
-            {list.length === 0 && <li className="muted" style={{ padding: 16 }}>이 사유의 공지가 없어요.</li>}
-          </ul>
+          <div className="review-list" aria-label="검수할 공지">
+            {[0, 1, 2].map((p) => {
+              const group = list.filter((n) => n.priority === p);
+              if (group.length === 0) return null;
+              return (
+                <section key={p} className="review-group" aria-labelledby={`prio-${p}`}>
+                  <h2 id={`prio-${p}`} className="review-group-title">
+                    {PRIORITY_LABEL[p]} <span className="count">{group.length}</span>
+                  </h2>
+                  <ul>
+                    {group.map((n) => (
+                      <li key={n.id}>
+                        <button
+                          className={`review-row ${n.id === selected ? "selected" : ""}`}
+                          aria-current={n.id === selected}
+                          onClick={() => setSelected(n.id)}
+                        >
+                          <span className="review-meta">
+                            <span className={`reason ${REASON_TONE[n.reviewReason]}`}>{REASON_LABEL[n.reviewReason]}</span>
+                            <span>{n.category}</span>
+                            {n.audienceLabel && <span>{n.audienceLabel}</span>}
+                            <span className="date">{n.postedOn}</span>
+                          </span>
+                          <span className="review-title">{n.shortTitle}</span>
+                          {n.items.length > 0 && <span className="muted">날짜 항목 {n.items.length}개</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+            {list.length === 0 && <p className="muted" style={{ padding: 16 }}>이 사유의 공지가 없어요.</p>}
+          </div>
 
           <section className="review-detail" aria-label="선택한 공지">
             {current ? (
@@ -167,31 +209,28 @@ function NoticeDetail({
   return (
     <div className="panel">
       <button className="ghost back" onClick={onBack}>
-        ← 목록
+        <ChevronIcon dir="left" /> 목록
       </button>
-      <div className="row" style={{ gap: 6 }}>
-        <span className="badge accent">{notice.category}</span>
-        <span className={`badge ${REASON_TONE[notice.reviewReason]}`}>{REASON_LABEL[notice.reviewReason]}</span>
-        <span className="muted">{notice.postedOn} 게시</span>
-      </div>
+      <p className="review-meta">
+        <span className={`reason ${REASON_TONE[notice.reviewReason]}`}>{REASON_LABEL[notice.reviewReason]}</span>
+        <span>{notice.category}</span>
+        <span className="date">{notice.postedOn} 게시 · 글 번호 {notice.articleNo}</span>
+      </p>
       <h2 className="detail-title">{notice.title}</h2>
       <p className="sub">{REASON_HELP[notice.reviewReason]}</p>
-      <div className="row" style={{ marginTop: 10 }}>
+      <p style={{ marginTop: 12 }}>
         <a className="btn" href={notice.url} target="_blank" rel="noreferrer">
-          학교 원문 열기 ↗
+          학교 원문 열기 <ExternalIcon size={14} />
         </a>
-        <span className="muted">글 번호 {notice.articleNo}</span>
-      </div>
-      {notice.attachments && (
-        <p className="muted" style={{ marginTop: 10 }}>
-          첨부: {notice.attachments.split("\n").join(", ")}
-        </p>
-      )}
-
-      <p className="panel-title" style={{ marginTop: 22 }}>
-        날짜 항목 <span className="muted">{notice.items.length}</span>
       </p>
-      {notice.items.length === 0 && !adding && <p className="muted">아직 날짜 항목이 없어요.</p>}
+      {notice.attachments && <p className="muted" style={{ marginTop: 10 }}>첨부: {notice.attachments.split("\n").join(", ")}</p>}
+
+      <AudienceEditor notice={notice} onChange={onChange} onError={onError} />
+
+      <h3 className="detail-section">
+        날짜 항목 <span className="count">{notice.items.length}</span>
+      </h3>
+      {notice.items.length === 0 && !adding && <p className="muted">아직 날짜 항목이 없어요. 학생 화면에 나가지 않아요.</p>}
       {notice.items.map((item) => (
         <ItemEditor key={item.id} item={item} onChange={onChange} onError={onError} />
       ))}
@@ -209,12 +248,90 @@ function NoticeDetail({
       )}
 
       <div className="row detail-actions">
-        {!adding && <button onClick={() => setAdding(true)}>+ 날짜 항목 추가</button>}
+        {!adding && (
+          <button onClick={() => setAdding(true)}>
+            <PlusIcon /> 날짜 항목 추가
+          </button>
+        )}
         <button className="primary" onClick={done} disabled={busy} style={{ marginLeft: "auto" }}>
-          {busy ? "처리 중..." : "검수 완료"}
+          {busy ? "처리 중…" : "검수 완료"}
         </button>
       </div>
     </div>
+  );
+}
+
+/** 대상 범위. 규칙이 정한 값을 보여주고, 틀렸으면 운영자가 고친다. 비우면 다시 규칙을 따른다. */
+function AudienceEditor({
+  notice,
+  onChange,
+  onError,
+}: {
+  notice: ReviewNotice;
+  onChange: () => void;
+  onError: (m: string) => void;
+}) {
+  const [scope, setScope] = useState<Scope | "">(notice.audienceOverridden ? notice.audienceScope : "");
+  const [label, setLabel] = useState(notice.audienceOverridden ? notice.audienceLabel ?? "" : "");
+  const [busy, setBusy] = useState(false);
+  const id = `aud-${notice.id}`;
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.editAudience(notice.id, scope === "" ? null : scope, label);
+      onChange();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="audience" onSubmit={save}>
+      <h3 className="detail-section">대상</h3>
+      <p>
+        <strong>{SCOPE_LABEL[notice.audienceScope]}</strong>
+        {notice.audienceLabel && ` · ${notice.audienceLabel}`}
+        <span className="muted"> ({notice.audienceOverridden ? "운영자가 고침" : "제목·본문 규칙"})</span>
+      </p>
+      {notice.audienceExcerpt ? (
+        <p className="excerpt">
+          <span className="excerpt-label">원문 발췌</span>
+          {notice.audienceExcerpt}
+        </p>
+      ) : (
+        <p className="muted">본문에서 지원 자격 문단을 못 찾았어요. 학생 화면에는 발췌 없이 나가요.</p>
+      )}
+      <div className="grid2">
+        <div>
+          <label htmlFor={`${id}-scope`}>범위 고치기</label>
+          <select id={`${id}-scope`} value={scope} onChange={(e) => setScope(e.target.value as Scope | "")}>
+            <option value="">규칙에 맡김</option>
+            {(Object.keys(SCOPE_LABEL) as Scope[]).map((s) => (
+              <option key={s} value={s}>
+                {SCOPE_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={`${id}-label`}>짧은 설명 (선택)</label>
+          <input
+            id={`${id}-label`}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="예: 제1전공생"
+            disabled={scope === ""}
+          />
+        </div>
+      </div>
+      <p style={{ marginTop: 10 }}>
+        <button type="submit" disabled={busy}>
+          {busy ? "저장 중…" : "대상 저장"}
+        </button>
+      </p>
+    </form>
   );
 }
 
@@ -278,7 +395,7 @@ function ItemEditor({
       <div className="item-row">
         <div>
           <div className="row" style={{ gap: 6 }}>
-            {item.reviewed ? <span className="badge ok">확인됨</span> : <span className="badge warn">검수 전</span>}
+            {item.reviewed ? <span className="badge ok">확인됨</span> : <span className="badge">자동</span>}
             <strong>{item.title}</strong>
           </div>
           <p className="muted" style={{ marginTop: 4 }}>

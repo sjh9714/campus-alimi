@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, type Me } from "@/lib/api";
+import { api, type Me, type Sido } from "@/lib/api";
 
 export default function Settings() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
@@ -10,6 +10,9 @@ export default function Settings() {
   const [entryYear, setEntryYear] = useState("");
   const [major, setMajor] = useState("");
   const [secondMajor, setSecondMajor] = useState("");
+  const [sido, setSido] = useState("");
+  const [sigungu, setSigungu] = useState("");
+  const [regions, setRegions] = useState<Sido[]>([]);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,6 +26,10 @@ export default function Settings() {
           setEntryYear(m.entryYear ? String(m.entryYear) : "");
           setMajor(m.major ?? "");
           setSecondMajor(m.secondMajor ?? "");
+          const [s, g] = (m.homeRegion ?? "").split(" ");
+          setSido(s ?? "");
+          setSigungu(g ?? "");
+          api.regions().then(setRegions).catch(() => setRegions([]));
         }
       })
       .catch((e) => {
@@ -55,6 +62,7 @@ export default function Settings() {
         entryYear: entryYear ? Number(entryYear) : null,
         major,
         secondMajor,
+        homeRegion: sido ? [sido, sigungu].filter(Boolean).join(" ") : "",
       });
       setMe(updated);
       setSaved(true);
@@ -72,7 +80,7 @@ export default function Settings() {
   };
 
   return (
-    <main className="narrow">
+    <main id="main" className="narrow">
       <div className="page-head">
         <h1>설정</h1>
         <p className="sub">{me ? me.email : "로그인하면 마감을 저장하고, 내 학년·전공에 맞는 항목을 먼저 볼 수 있어요."}</p>
@@ -85,10 +93,10 @@ export default function Settings() {
       )}
 
       {me === undefined ? (
-        <div className="empty">불러오는 중...</div>
+        <div className="empty">불러오는 중…</div>
       ) : !me ? (
         <section className="panel">
-          <p className="panel-title">이메일로 로그인</p>
+          <h2 className="panel-title">이메일로 로그인</h2>
           {sentTo ? (
             <div role="status">
               <p>
@@ -109,13 +117,14 @@ export default function Settings() {
                   type="email"
                   inputMode="email"
                   autoComplete="email"
+                  spellCheck={false}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@catholic.ac.kr"
                 />
                 <button className="primary" type="submit" disabled={busy} style={{ padding: "10px 16px" }}>
-                  {busy ? "보내는 중..." : "링크 받기"}
+                  {busy ? "보내는 중…" : "링크 받기"}
                 </button>
               </div>
             </form>
@@ -124,9 +133,9 @@ export default function Settings() {
       ) : (
         <>
           <section className="panel">
-            <p className="panel-title">내 정보</p>
+            <h2 className="panel-title">내 정보</h2>
             <p className="muted">
-              세 칸 모두 선택이에요. 넣으면 내게 해당하는 일정이 표시돼요. 소득이나 성적은 받지 않아요.
+              모두 선택이에요. 넣으면 내게 맞는 공지가 홈 위쪽으로 올라와요. 소득이나 성적은 받지 않아요.
             </p>
             <form onSubmit={saveProfile}>
               <div className="grid2">
@@ -170,12 +179,57 @@ export default function Settings() {
                   setSaved(false);
                 }}
               />
-              <p className="muted" style={{ marginTop: 8 }}>
-                학년은 입학년도로 계산해요. 휴학했다면 실제와 다를 수 있어요.
-              </p>
+              <p className="hint">학년은 입학년도로 계산해요. 휴학했다면 실제와 다를 수 있어요.</p>
+
+              <fieldset className="region">
+                <legend>연고 지역</legend>
+                <div className="grid2">
+                  <div>
+                    <label htmlFor="sido">시·도</label>
+                    <select
+                      id="sido"
+                      value={sido}
+                      onChange={(e) => {
+                        setSido(e.target.value);
+                        setSigungu("");
+                        setSaved(false);
+                      }}
+                    >
+                      <option value="">고르지 않음</option>
+                      {regions.map((r) => (
+                        <option key={r.name} value={r.name}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="sigungu">시·군·구</label>
+                    <select
+                      id="sigungu"
+                      value={sigungu}
+                      disabled={!sido || (regions.find((r) => r.name === sido)?.sigungu.length ?? 0) === 0}
+                      onChange={(e) => {
+                        setSigungu(e.target.value);
+                        setSaved(false);
+                      }}
+                    >
+                      <option value="">시·도 전체</option>
+                      {(regions.find((r) => r.name === sido)?.sigungu ?? []).map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className="hint">
+                  본인이나 부모님 주민등록 주소예요. 그 지역 재단·지자체 장학금이 &lsquo;내게 맞는 공지&rsquo;로 올라와요.
+                </p>
+              </fieldset>
               <div className="row" style={{ marginTop: 16 }}>
                 <button className="primary" type="submit" disabled={busy}>
-                  {busy ? "저장 중..." : "저장"}
+                  {busy ? "저장 중…" : "저장"}
                 </button>
                 {saved && (
                   <span className="badge ok" role="status">
@@ -187,7 +241,7 @@ export default function Settings() {
           </section>
 
           <section className="panel" style={{ marginTop: 16 }}>
-            <p className="panel-title">알림</p>
+            <h2 className="panel-title">알림</h2>
             <ul className="side-list">
               <li>
                 <span>새 장학 공지</span>

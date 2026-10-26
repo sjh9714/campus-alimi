@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import "./pretendard.css";
 import "./globals.css";
 import { Header } from "./tabs";
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
+  themeColor: "#1d2741",
   width: "device-width",
   initialScale: 1,
 };
@@ -20,6 +21,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body>
+        <a className="skip" href="#main">
+          본문으로 건너뛰기
+        </a>
         <Header />
         {children}
       </body>

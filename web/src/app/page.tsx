@@ -2,44 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { api, dday, formatDate, formatRange, type Benefit, type Item, type Me } from "@/lib/api";
+import { api, dday, formatRange, type Benefit, type Card, type Feed, type Line, type Me, type Section } from "@/lib/api";
 import { MonthCalendar } from "./calendar";
+import { BookmarkIcon, ChevronIcon, ExternalIcon } from "./icons";
 
-type Kind = "schedule" | "scholarship" | "academic";
-
-const KIND_LABEL: Record<Kind, string> = {
-  schedule: "학사일정",
-  scholarship: "장학",
-  academic: "학사공지",
-};
-
-function kindOf(item: Item): Kind {
-  if (item.sourceKind === "SCHEDULE") return "schedule";
-  return item.notice?.category === "장학" ? "scholarship" : "academic";
-}
-
-/** 마감까지 남은 날로 묶는다. 이번 주 = 7일 안, 이번 달 = 30일 안. */
-function groupOf(d: number): "week" | "month" | "later" {
-  if (d <= 7) return "week";
-  if (d <= 30) return "month";
-  return "later";
-}
-
-const GROUP_LABEL = { week: "이번 주 마감", month: "한 달 안", later: "그 뒤" } as const;
+type Kind = Card["kind"];
+const KIND_LABEL: Record<Kind, string> = { schedule: "학사일정", scholarship: "장학", academic: "학사" };
+const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function Home() {
-  const [items, setItems] = useState<Item[] | null>(null);
+  const [feed, setFeed] = useState<Feed | null>(null);
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [kinds, setKinds] = useState<Set<Kind>>(new Set(["schedule", "scholarship", "academic"]));
+  const [kind, setKind] = useState<Kind | "all">("all");
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [day, setDay] = useState<string | null>(null);
 
   const load = () =>
-    Promise.all([api.items(false), api.me(), api.benefits()])
-      .then(([i, m, b]) => {
-        setItems(i);
+    Promise.all([api.feed(), api.me(), api.benefits()])
+      .then(([f, m, b]) => {
+        setFeed(f);
         setMe(m);
         setBenefits(b);
         setError(null);
@@ -50,250 +33,324 @@ export default function Home() {
     load();
   }, []);
 
-  const toggleKind = (k: Kind) => {
-    const next = new Set(kinds);
-    if (next.has(k)) next.delete(k);
-    else next.add(k);
-    setKinds(next);
-  };
-
-  const toggleSave = async (item: Item) => {
-    if (!me) return;
+  const toggleSave = async (line: Line) => {
     try {
-      if (item.saved) await api.unsave(item.id);
-      else await api.save(item.id);
-      await load();
+      if (line.saved) await api.unsave(line.id);
+      else await api.save(line.id);
+      setFeed(await api.feed());
     } catch (e) {
       setError((e as Error).message);
     }
   };
 
+  const allCards = useMemo(() => (feed?.sections ?? []).flatMap((s) => s.cards), [feed]);
   const counts = useMemo(() => {
     const c: Record<Kind, number> = { schedule: 0, scholarship: 0, academic: 0 };
-    (items ?? []).forEach((i) => c[kindOf(i)]++);
+    allCards.forEach((card) => c[card.kind]++);
     return c;
-  }, [items]);
-
-  const visible = useMemo(
-    () =>
-      (items ?? [])
-        .filter((i) => kinds.has(kindOf(i)))
-        .filter((i) => !day || i.endsOn === day)
-        .sort((a, b) => a.endsOn.localeCompare(b.endsOn) || a.bucket - b.bucket),
-    [items, kinds, day],
-  );
-
+  }, [allCards]);
   const marked = useMemo(
-    () => new Set((items ?? []).filter((i) => kinds.has(kindOf(i))).map((i) => i.endsOn)),
-    [items, kinds],
+    () => new Set(allCards.flatMap((c) => [c.deadline, ...c.next].filter((l) => l.kind === "ACTION").map((l) => l.endsOn))),
+    [allCards],
   );
+  const saved = useMemo(
+    () =>
+      allCards
+        .flatMap((c) => [c.deadline, ...c.next].filter((l) => l.saved).map((l) => ({ card: c, line: l })))
+        .sort((a, b) => a.line.endsOn.localeCompare(b.line.endsOn)),
+    [allCards],
+  );
+  const soonBenefits = benefits
+    .filter((b) => b.endsOn && dday(b.endsOn) >= 0 && dday(b.endsOn) <= 60)
+    .sort((a, b) => a.endsOn!.localeCompare(b.endsOn!));
 
-  const groups = (["week", "month", "later"] as const)
-    .map((g) => ({ g, items: visible.filter((i) => groupOf(dday(i.endsOn)) === g) }))
-    .filter((x) => x.items.length > 0);
-
-  const saved = (items ?? []).filter((i) => i.saved).sort((a, b) => a.endsOn.localeCompare(b.endsOn));
-  const weekCount = (items ?? []).filter((i) => dday(i.endsOn) <= 7).length;
+  const filtered = (s: Section): Card[] =>
+    s.cards.filter(
+      (c) =>
+        (kind === "all" || c.kind === kind) &&
+        (!day || [c.deadline, ...c.next].some((l) => l.kind === "ACTION" && l.endsOn === day)),
+    );
+  const filtering = kind !== "all" || day !== null;
+  const visibleSections = (feed?.sections ?? []).map((s) => ({ section: s, cards: filtered(s) })).filter((s) => s.cards.length > 0);
 
   return (
-    <main>
+    <main id="main">
       <div className="page-head">
         <h1>다가오는 마감</h1>
-        <p className="sub">
-          {me
-            ? me.grade || me.major
-              ? `${me.grade ? `${me.grade}학년` : ""}${me.major ? ` · ${me.major}` : ""} 기준으로 내게 해당하는 항목을 표시했어요.`
-              : "설정에서 입학년도와 전공을 넣으면 내게 해당하는 항목이 표시돼요."
-            : "가톨릭대 학사일정과 장학·학사 공지에서 날짜만 모았어요. 누르면 학교 원문으로 갑니다."}
-        </p>
+        <p className="sub">{subtitle(me)}</p>
       </div>
 
-      {items === null ? (
+      {feed === null ? (
         error ? (
           <div className="empty" role="alert">
             <p>{error}</p>
             <button onClick={load}>다시 시도</button>
           </div>
         ) : (
-          <div className="empty">불러오는 중...</div>
+          <div className="empty">불러오는 중…</div>
         )
       ) : (
-      <>
-      {error && <div className="msg error" role="alert">{error}</div>}
-
-      <div className="chips" role="group" aria-label="종류 필터">
-        {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
-          <button key={k} className="chip" aria-pressed={kinds.has(k)} onClick={() => toggleKind(k)}>
-            {KIND_LABEL[k]} {counts[k]}
-          </button>
-        ))}
-      </div>
-
-      <div className="dashboard">
-        <aside className="left">
-          <div className="panel">
-            <MonthCalendar month={month} onMonth={setMonth} marked={marked} selected={day} onSelect={setDay} />
-          </div>
-          <div className="panel">
-            <p className="panel-title">종류</p>
-            <div className="filters">
-              {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
-                <label key={k} className="filter">
-                  <span className="label">
-                    <input type="checkbox" checked={kinds.has(k)} onChange={() => toggleKind(k)} />
-                    {KIND_LABEL[k]}
-                  </span>
-                  <span className="n">{counts[k]}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </aside>
-
-        <section aria-label="마감 목록">
-          {day && (
-            <div className="msg row between">
-              <span>{formatDate(day)} 마감만 보는 중</span>
-              <button className="ghost" onClick={() => setDay(null)}>
-                전체 보기
-              </button>
-            </div>
-          )}
-          {visible.length === 0 && (
-            <div className="empty">{day ? "이날 마감인 항목이 없어요." : "표시할 마감이 없어요."}</div>
-          )}
-          {groups.map(({ g, items: list }) => (
-            <div className="timeline-group" key={g}>
-              <h2>
-                {GROUP_LABEL[g]} <span className="count">{list.length}</span>
-              </h2>
-              {list.map((item) => (
-                <ItemCard key={item.id} item={item} canSave={!!me} onToggle={() => toggleSave(item)} />
-              ))}
-            </div>
-          ))}
-        </section>
-
-        <aside className="right">
-          <div className="panel">
-            <p className="panel-title">이번 주 마감</p>
-            <div className="stat">
-              <span className="big">{weekCount}</span>
-              <span className="muted">건</span>
-            </div>
-          </div>
-          <div className="panel">
-            <p className="panel-title">내 저장</p>
-            {!me ? (
-              <p className="muted">
-                <Link href="/settings/">로그인</Link>하면 마감을 저장하고 3일 전에 알림을 받아요.
-              </p>
-            ) : saved.length === 0 ? (
-              <p className="muted">저장한 항목이 없어요. 목록에서 저장을 눌러 보세요.</p>
-            ) : (
-              <ul className="side-list">
-                {saved.slice(0, 6).map((i) => (
-                  <li key={i.id}>
-                    <span className="name">{i.title}</span>
-                    <DdayBadge endsOn={i.endsOn} />
-                  </li>
-                ))}
-              </ul>
+        <div className="home">
+          <div className="feed">
+            {error && (
+              <div className="msg error" role="alert">
+                {error}
+              </div>
             )}
+            <div className="toolbar">
+              <div className="segmented" role="group" aria-label="종류">
+                <button aria-pressed={kind === "all"} onClick={() => setKind("all")}>
+                  전체 <span className="n">{allCards.length}</span>
+                </button>
+                {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
+                  <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>
+                    {KIND_LABEL[k]} <span className="n">{counts[k]}</span>
+                  </button>
+                ))}
+              </div>
+              {day && (
+                <button className="filter-pill" onClick={() => setDay(null)}>
+                  {shortDate(day)} 마감만 보는 중 · 전체 보기
+                </button>
+              )}
+            </div>
+
+            {visibleSections.length === 0 && (
+              <div className="empty">
+                {filtering ? (
+                  <>
+                    <p>조건에 맞는 마감이 없어요.</p>
+                    <button
+                      onClick={() => {
+                        setKind("all");
+                        setDay(null);
+                      }}
+                    >
+                      필터 지우기
+                    </button>
+                  </>
+                ) : (
+                  "지금 남은 마감이 없어요."
+                )}
+              </div>
+            )}
+
+            {visibleSections.map(({ section, cards }) => (
+              <SectionBlock
+                key={section.key}
+                section={section}
+                cards={cards}
+                open={!section.collapsed || filtering}
+                canSave={!!me}
+                onToggle={toggleSave}
+              />
+            ))}
           </div>
-          <div className="panel">
-            <p className="panel-title">
-              학생 혜택 <Link href="/benefits/">전체 {benefits.length} →</Link>
-            </p>
-            <ul className="side-list">
-              {benefits.slice(0, 5).map((b) => (
-                <li key={b.id}>
-                  <span className="name">{b.name}</span>
-                  {b.endsOn ? <DdayBadge endsOn={b.endsOn} /> : <span className="badge ok">상시</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
-      </div>
-      </>
+
+          <aside className="rail" aria-label="달력과 요약">
+            <div className="panel">
+              <MonthCalendar month={month} onMonth={setMonth} marked={marked} selected={day} onSelect={setDay} />
+            </div>
+            <div className="panel">
+              <h2 className="panel-title">내 저장</h2>
+              {!me ? (
+                <p className="muted">
+                  <Link href="/settings/">로그인</Link>하면 마감을 저장해 두고 한곳에서 볼 수 있어요.
+                </p>
+              ) : saved.length === 0 ? (
+                <p className="muted">저장한 마감이 없어요. 목록에서 저장을 눌러 보세요.</p>
+              ) : (
+                <ul className="side-list">
+                  {saved.slice(0, 8).map(({ card, line }) => (
+                    <li key={line.id}>
+                      <span className="name">{line.label ? `${card.title} · ${line.label}` : card.title}</span>
+                      <Dday endsOn={line.endsOn} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="panel">
+              <h2 className="panel-title">
+                곧 끝나는 학생 혜택
+                <Link href="/benefits/" className="panel-link">
+                  전체 {benefits.length}
+                </Link>
+              </h2>
+              {soonBenefits.length === 0 ? (
+                <p className="muted">60일 안에 끝나는 혜택이 없어요.</p>
+              ) : (
+                <ul className="side-list">
+                  {soonBenefits.map((b) => (
+                    <li key={b.id}>
+                      <span className="name">{b.name}</span>
+                      <Dday endsOn={b.endsOn!} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
+        </div>
       )}
     </main>
   );
 }
 
-function DdayBadge({ endsOn }: { endsOn: string }) {
-  const d = dday(endsOn);
-  const label = d < 0 ? "지남" : d === 0 ? "오늘" : `D-${d}`;
-  return <span className={`badge ${d <= 3 ? "urgent" : d <= 7 ? "warn" : ""}`}>{label}</span>;
+function subtitle(me: Me | null): string {
+  if (!me) return "가톨릭대 학사일정과 장학·학사 공지에서 학생이 해야 할 일만 골라 마감 순으로 보여 드려요.";
+  const parts = [me.grade ? `${me.grade}학년` : "", me.major ?? "", me.homeRegion ? `${me.homeRegion} 연고` : ""].filter(Boolean);
+  if (parts.length === 0) return "설정에서 입학년도·전공·연고 지역을 넣으면 내게 맞는 공지가 위로 올라와요.";
+  return `${parts.join(" · ")} 기준으로 내게 맞는 공지를 위로 올렸어요.`;
 }
 
-/** "[학생지원팀] 2026년 ○○ 장학생 선발 안내(10. 12.(월) ~ 10. 28.(수))" → "2026년 ○○ 장학생 선발 안내" */
-function shortNoticeTitle(t: string): string {
-  return t
-    .replace(/^\s*(\[[^\]]*\]\s*)+/, "")
-    .replace(/\s*\([^()]*(\([^()]*\)[^()]*)*\)\s*$/, (m) => (/\d{1,2}\s*[./월]\s*\d{1,2}/.test(m) ? "" : m))
-    .trim();
-}
-
-/**
- * 공지 표에서 뽑은 항목은 제목이 "트리니티 신청"처럼 칸 이름뿐이라 무슨 일인지 모른다.
- * 그럴 때는 공지 제목을 크게, 칸 이름을 작게 보여준다.
- */
-function headingOf(item: Item): { heading: string; step: string | null } {
-  if (!item.notice) return { heading: item.title, step: null };
-  const notice = shortNoticeTitle(item.notice.title);
-  if (notice.includes(item.title) || item.title.includes(notice)) return { heading: item.title, step: null };
-  return { heading: notice, step: item.title };
-}
-
-function ItemCard({ item, canSave, onToggle }: { item: Item; canSave: boolean; onToggle: () => void }) {
-  const { heading, step } = headingOf(item);
-  const d = dday(item.endsOn);
-  const tone = d < 0 ? "past" : d <= 3 ? "urgent" : d <= 7 ? "soon" : "";
-  const dLabel = d < 0 ? "지남" : d === 0 ? "오늘" : `D-${d}`;
-  const [, mm, dd] = item.endsOn.split("-");
-  const target =
-    item.targetGrade === null || item.targetDept === null
-      ? null
-      : [item.targetGrade === "ALL" ? "전체 학년" : `${item.targetGrade}학년`, item.targetDept === "ALL" ? "" : item.targetDept]
-          .filter(Boolean)
-          .join(" · ");
+function SectionBlock({
+  section,
+  cards,
+  open,
+  canSave,
+  onToggle,
+}: {
+  section: Section;
+  cards: Card[];
+  open: boolean;
+  canSave: boolean;
+  onToggle: (l: Line) => void;
+}) {
+  const rows = (
+    <ul className="rows">
+      {cards.map((c) => (
+        <CardRow key={c.key} card={c} canSave={canSave} onToggle={onToggle} />
+      ))}
+    </ul>
+  );
+  if (section.collapsed) {
+    return (
+      <details className="block fold" open={open}>
+        <summary>
+          <span className="fold-head">
+            <span className="fold-title">
+              {section.title} <span className="count">{cards.length}건</span>
+            </span>
+            <span className="note">{section.note}</span>
+          </span>
+          <ChevronIcon />
+        </summary>
+        {rows}
+      </details>
+    );
+  }
+  const id = `section-${section.key}`;
   return (
-    <article className={`item ${item.bucket === 0 ? "mine" : ""}`}>
-      <div className={`dday ${tone}`} aria-label={`마감 ${dLabel}`}>
-        <span className="num">{dLabel}</span>
-        <span className="date">
-          {Number(mm)}.{Number(dd)}
+    <section className={`block ${section.key}`} aria-labelledby={id}>
+      <header className="block-head">
+        <h2 id={id}>
+          {section.title} <span className="count">{cards.length}</span>
+        </h2>
+        <p className="note">{section.note}</p>
+      </header>
+      {rows}
+    </section>
+  );
+}
+
+function CardRow({ card, canSave, onToggle }: { card: Card; canSave: boolean; onToggle: (l: Line) => void }) {
+  const line = card.deadline;
+  const d = dday(line.endsOn);
+  const tone = d <= 3 ? "urgent" : d <= 7 ? "soon" : "";
+  const date = new Date(line.endsOn + "T00:00:00");
+  const audience = card.audience.scope === "GENERAL" ? null : card.audience.label;
+  return (
+    <li className={`row-card ${tone}`}>
+      <div className="when">
+        <span className="sr-only">
+          마감 {date.getFullYear()}년 {date.getMonth() + 1}월 {date.getDate()}일 {WEEKDAY[date.getDay()]}요일, {ddayText(d)}
+        </span>
+        <span className="md" aria-hidden>
+          {date.getMonth() + 1}.{date.getDate()}
+        </span>
+        <span className="wd" aria-hidden>
+          {date.getFullYear() !== new Date().getFullYear() && `${date.getFullYear()} · `}
+          {WEEKDAY[date.getDay()]}
+        </span>
+        <span className={`dday ${tone}`} aria-hidden>
+          {ddayText(d)}
         </span>
       </div>
-      <div>
-        <p className="title">{heading}</p>
-        <p className="sub">
-          {step && <strong className="step">{step}</strong>}
-          {formatRange(item)}
-        </p>
-        <div className="meta">
-          <span className="badge accent">{KIND_LABEL[kindOf(item)]}</span>
-          {item.bucket === 0 && <span className="badge ok">내게 해당</span>}
-          {target && item.bucket !== 0 && <span className="badge">{target}</span>}
-          {item.bucket === 2 && <span className="badge">대상 확인 필요</span>}
-          {!item.reviewed && <span className="badge warn">검수 전</span>}
-        </div>
-        {item.targetNote && <p className="muted" style={{ marginTop: 6 }}>{item.targetNote}</p>}
-        {item.notice && (
-          <a className="notice-link" href={item.notice.url} target="_blank" rel="noreferrer">
-            학교 공지 원문 보기 ↗
+      <div className="body">
+        <h3 className="title">
+          <a href={card.url} target="_blank" rel="noreferrer" title={card.sourceTitle}>
+            {card.title}
+            <span className="ext">
+              <ExternalIcon size={14} />
+              <span className="sr-only">(학교 {card.kind === "schedule" ? "학사일정" : "공지"} 새 창)</span>
+            </span>
           </a>
+        </h3>
+        <p className="due">
+          <strong>{line.label ?? (line.startsOn ? "기간" : "마감")}</strong> {formatRange(line)}
+        </p>
+        <p className="meta">
+          <span className={`kind ${card.kind}`}>{KIND_LABEL[card.kind]}</span>
+          {audience && <span className="aud">{audience}</span>}
+        </p>
+        {card.audience.excerpt && <Excerpt text={card.audience.excerpt} />}
+        {card.next.length > 0 && (
+          <details className="next">
+            <summary>
+              이후 일정 {card.next.length}개 <ChevronIcon size={14} />
+            </summary>
+            <ul>
+              {card.next.map((l) => (
+                <li key={l.id} className={l.kind === "INFO" ? "info" : ""}>
+                  <span className="md">{shortDate(l.endsOn)}</span>
+                  <span>
+                    {l.label ?? "마감"}
+                    {l.kind === "INFO" && <span className="muted"> · 안내</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </div>
       {canSave && (
-        <div className="actions">
-          <button className="save" onClick={onToggle} aria-pressed={item.saved}>
-            {item.saved ? "저장됨" : "저장"}
-          </button>
-        </div>
+        <button className="save" aria-pressed={line.saved} onClick={() => onToggle(line)}>
+          <BookmarkIcon filled={line.saved} />
+          {line.saved ? "저장됨" : "저장"}
+        </button>
       )}
-    </article>
+    </li>
   );
+}
+
+/** 지원 자격 원문 발췌. 길면 두 줄만 보이고 펼칠 수 있다. */
+function Excerpt({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 70;
+  return (
+    <div className={`excerpt ${long && !open ? "clamped" : ""}`}>
+      <span className="excerpt-label">지원 자격 · 원문 발췌</span>
+      <p>{text}</p>
+      {long && (
+        <button className="more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "접기" : "더 보기"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Dday({ endsOn }: { endsOn: string }) {
+  const d = dday(endsOn);
+  return <span className={`badge ${d <= 3 ? "urgent" : d <= 7 ? "warn" : ""}`}>{ddayText(d)}</span>;
+}
+
+function ddayText(d: number): string {
+  return d < 0 ? "지남" : d === 0 ? "오늘" : `D-${d}`;
+}
+
+function shortDate(isoDate: string): string {
+  const [, m, d] = isoDate.split("-");
+  return `${Number(m)}.${Number(d)}`;
 }

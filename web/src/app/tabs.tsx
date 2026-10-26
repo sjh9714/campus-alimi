@@ -22,7 +22,7 @@ export function Header() {
         <div className="inner">
           <Link href="/" className="brand">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icon.svg" alt="" />
+            <img src="/icon.svg" alt="" width={28} height={28} />
             캠퍼스 알리미
           </Link>
           <nav className="top-nav" aria-label="주 메뉴">

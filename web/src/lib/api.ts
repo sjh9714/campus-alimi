@@ -53,9 +53,48 @@ export type Me = {
   entryYear: number | null;
   major: string | null;
   secondMajor: string | null;
+  homeRegion: string | null;
   grade: number | null;
   admin: boolean;
 };
+
+export type Scope = "GENERAL" | "REGION" | "GROUP" | "FIELD" | "RESULT";
+
+/** 카드 안의 날짜 한 줄. label이 없으면 공지 제목 그 자체의 마감이다. */
+export type Line = {
+  id: number;
+  label: string | null;
+  startsOn: string | null;
+  endsOn: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  kind: "ACTION" | "INFO";
+  saved: boolean;
+};
+
+export type Card = {
+  key: string;
+  kind: "schedule" | "scholarship" | "academic";
+  title: string;
+  sourceTitle: string;
+  url: string;
+  audience: { scope: Scope; label: string | null; excerpt: string | null };
+  mine: boolean;
+  deadline: Line;
+  next: Line[];
+};
+
+export type Section = {
+  key: "must" | "mine" | "open" | "region" | "group";
+  title: string;
+  note: string;
+  collapsed: boolean;
+  cards: Card[];
+};
+
+export type Feed = { sections: Section[]; signedIn: boolean; hasHomeRegion: boolean };
+
+export type Sido = { name: string; sigungu: string[] };
 
 export type ReviewNotice = {
   id: number;
@@ -64,11 +103,23 @@ export type ReviewNotice = {
   title: string;
   postedOn: string;
   url: string;
+  shortTitle: string;
   reviewReason: NoticeRef["reviewReason"];
   hasImages: boolean;
   attachments: string;
   status: NoticeRef["status"];
+  audienceScope: Scope;
+  audienceLabel: string | null;
+  audienceExcerpt: string | null;
+  audienceOverridden: boolean;
+  /** 0 = 모든 재학생, 1 = 일반, 2 = 지역·특정 대상 */
+  priority: 0 | 1 | 2;
   items: Item[];
+};
+
+export type ReviewQueue = {
+  notices: ReviewNotice[];
+  closed: { PAST: number; RESULT: number; STALE: number };
 };
 
 export type ItemEdit = {
@@ -117,7 +168,8 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 export const api = {
-  items: (includePast = false) => call<Item[]>("GET", `/api/items?includePast=${includePast}`),
+  feed: () => call<Feed>("GET", "/api/feed"),
+  regions: () => call<Sido[]>("GET", "/api/regions"),
   benefits: () => call<Benefit[]>("GET", "/api/benefits"),
   me: async (): Promise<Me | null> => {
     try {
@@ -129,13 +181,15 @@ export const api = {
   },
   requestLogin: (email: string) => call<{ message: string }>("POST", "/api/auth/request", { email }),
   logout: () => call<void>("POST", "/api/auth/logout"),
-  updateProfile: (p: { entryYear: number | null; major: string; secondMajor: string }) =>
+  updateProfile: (p: { entryYear: number | null; major: string; secondMajor: string; homeRegion: string }) =>
     call<Me>("PUT", "/api/me/profile", p),
   save: (id: number) => call<void>("POST", `/api/me/saved/${id}`),
   unsave: (id: number) => call<void>("DELETE", `/api/me/saved/${id}`),
   check: (id: number) => call<void>("POST", `/api/me/benefits/${id}`),
   uncheck: (id: number) => call<void>("DELETE", `/api/me/benefits/${id}`),
-  review: () => call<ReviewNotice[]>("GET", "/api/admin/review"),
+  review: () => call<ReviewQueue>("GET", "/api/admin/review"),
+  editAudience: (noticeId: number, scope: Scope | null, label: string) =>
+    call<ReviewNotice>("PUT", `/api/admin/notices/${noticeId}/audience`, { scope, label }),
   markReviewed: (noticeId: number) => call<ReviewNotice>("POST", `/api/admin/notices/${noticeId}/reviewed`),
   editItem: (itemId: number, edit: ItemEdit) => call<Item>("PUT", `/api/admin/items/${itemId}`, edit),
   addItem: (noticeId: number, edit: ItemEdit) => call<Item>("POST", `/api/admin/notices/${noticeId}/items`, edit),

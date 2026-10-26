@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, formatDate, type Benefit, type Me } from "@/lib/api";
+import { api, dday, formatDate, type Benefit, type Me } from "@/lib/api";
+import { CheckIcon, ExternalIcon } from "../icons";
 
 const CATEGORY: Record<string, string> = {
   TOOL: "개발·학습 도구",
@@ -44,7 +45,7 @@ export default function Benefits() {
 
   const categories = Array.from(new Set((benefits ?? []).map((b) => b.category)));
   return (
-    <main>
+    <main id="main">
       <div className="page-head">
         <h1>학생 혜택</h1>
         <p className="sub">
@@ -58,57 +59,74 @@ export default function Benefits() {
         </p>
       </div>
       {error && <div className="msg error" role="alert">{error}</div>}
-      {benefits === null && !error && <div className="empty">불러오는 중...</div>}
-      {categories.map((c, idx) => (
-        <section key={c} className={idx > 0 ? "section-gap" : ""}>
-          <h2>
-            {CATEGORY[c] ?? c}{" "}
-            <span className="count">{(benefits ?? []).filter((b) => b.category === c).length}</span>
-          </h2>
-          <div className="benefit-grid">
-            {(benefits ?? [])
-              .filter((b) => b.category === c)
-              .map((b) => (
-                <article className="panel benefit" key={b.id}>
-                  <div className="row between">
-                    <p className="title">{b.name}</p>
+      {benefits === null && !error && <div className="empty">불러오는 중…</div>}
+      {categories.map((c) => {
+        const list = (benefits ?? []).filter((b) => b.category === c);
+        return (
+          <section key={c} className="block" aria-labelledby={`cat-${c}`}>
+            <header className="block-head">
+              <h2 id={`cat-${c}`}>
+                {CATEGORY[c] ?? c} <span className="count">{list.length}</span>
+              </h2>
+            </header>
+            <ul className="rows">
+              {list.map((b) => (
+                <li className="benefit-row" key={b.id}>
+                  <div className="body">
+                    <h3 className="title">{b.name}</h3>
+                    <p className="summary">{b.summary}</p>
+                    <dl>
+                      {b.price && (
+                        <>
+                          <dt>가격</dt>
+                          <dd>{b.price}</dd>
+                        </>
+                      )}
+                      <dt>조건</dt>
+                      <dd>{b.condition}</dd>
+                      <dt>방법</dt>
+                      <dd>{b.howTo}</dd>
+                      <dt>갱신</dt>
+                      <dd>{b.renewalRule}</dd>
+                    </dl>
+                    <p className="meta">
+                      <a href={b.sourceUrl} target="_blank" rel="noreferrer">
+                        출처 {b.sourceName} <ExternalIcon size={13} />
+                      </a>
+                      {b.stale ? (
+                        <span className="badge urgent">재확인 필요</span>
+                      ) : (
+                        <span>확인 {formatDate(b.verifiedOn)}</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="side">
+                    {b.endsOn ? (
+                      <span className="ends">
+                        <span className="badge warn">{ddayLabel(b.endsOn)}</span>
+                        <span className="muted">{formatDate(b.endsOn)}까지</span>
+                      </span>
+                    ) : (
+                      <span className="muted">상시</span>
+                    )}
                     {me && (
                       <button className="save" onClick={() => toggle(b)} aria-pressed={b.checked}>
+                        <CheckIcon />
                         {b.checked ? "받는 중" : "체크"}
                       </button>
                     )}
                   </div>
-                  <p className="sub">{b.summary}</p>
-                  <dl>
-                    {b.price && (
-                      <>
-                        <dt>가격</dt>
-                        <dd>{b.price}</dd>
-                      </>
-                    )}
-                    <dt>조건</dt>
-                    <dd>{b.condition}</dd>
-                    <dt>방법</dt>
-                    <dd>{b.howTo}</dd>
-                    <dt>갱신</dt>
-                    <dd>{b.renewalRule}</dd>
-                  </dl>
-                  <div className="foot">
-                    <a className="notice-link" style={{ marginTop: 0 }} href={b.sourceUrl} target="_blank" rel="noreferrer">
-                      출처: {b.sourceName}
-                    </a>
-                    <span className="row">
-                      {b.endsOn && <span className="badge warn">~{formatDate(b.endsOn)}</span>}
-                      <span className={`badge ${b.stale ? "urgent" : "ok"}`}>
-                        {b.stale ? "재확인 필요" : `확인 ${formatDate(b.verifiedOn)}`}
-                      </span>
-                    </span>
-                  </div>
-                </article>
+                </li>
               ))}
-          </div>
-        </section>
-      ))}
+            </ul>
+          </section>
+        );
+      })}
     </main>
   );
+}
+
+function ddayLabel(endsOn: string): string {
+  const d = dday(endsOn);
+  return d < 0 ? "끝남" : d === 0 ? "오늘까지" : `D-${d}`;
 }
