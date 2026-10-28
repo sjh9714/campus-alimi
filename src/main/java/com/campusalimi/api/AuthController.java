@@ -13,6 +13,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -39,10 +40,10 @@ public class AuthController {
     }
 
     public record MeView(String email, Integer entryYear, String major, String secondMajor, String homeRegion,
-            Integer grade, boolean admin) {
+            Integer grade, boolean admin, boolean digestEnabled) {
         static MeView of(AppUser u, boolean admin) {
             return new MeView(u.getEmail(), u.getEntryYear(), u.getMajor(), u.getSecondMajor(), u.getHomeRegion(),
-                    u.grade(LocalDate.now()), admin);
+                    u.grade(LocalDate.now()), admin, u.isDigestEnabled());
         }
     }
 
@@ -69,6 +70,21 @@ public class AuthController {
         auth.logout(request);
         response.addCookie(auth.sessionCookie("", true));
         return ResponseEntity.noContent().build();
+    }
+
+    /** 탈퇴. 저장·체크·세션·알림 기록과 계정을 지운다. 되돌릴 수 없다. */
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteMe(HttpServletRequest request, HttpServletResponse response) {
+        AppUser user = auth.requireUser(request);
+        auth.deleteAccount(user);
+        response.addCookie(auth.sessionCookie("", true));
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 개인정보 처리방침의 문의처. 보내는 메일 주소를 그대로 쓴다. */
+    @GetMapping("/meta")
+    public Map<String, String> meta() {
+        return Map.of("contactEmail", props.mail().from() == null ? "" : props.mail().from());
     }
 
     @GetMapping("/me")

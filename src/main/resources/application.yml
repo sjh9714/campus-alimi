@@ -43,6 +43,8 @@ app:
   mail:
     mode: ${MAIL_MODE:console}
     from: ${MAIL_FROM:campus-alimi@localhost}
+  digest:
+    cron: "0 0 8 * * *"
   schedule:
     cron: "0 0 6 * * *"
     campus: 성심

@@ -56,6 +56,7 @@ export type Me = {
   homeRegion: string | null;
   grade: number | null;
   admin: boolean;
+  digestEnabled: boolean;
 };
 
 export type Scope = "GENERAL" | "REGION" | "GROUP" | "FIELD" | "RESULT";
@@ -181,6 +182,9 @@ export const api = {
   },
   requestLogin: (email: string) => call<{ message: string }>("POST", "/api/auth/request", { email }),
   logout: () => call<void>("POST", "/api/auth/logout"),
+  setDigest: (enabled: boolean) => call<Me>("PUT", "/api/me/digest", { enabled }),
+  deleteAccount: () => call<void>("DELETE", "/api/me"),
+  meta: () => call<{ contactEmail: string }>("GET", "/api/meta"),
   updateProfile: (p: { entryYear: number | null; major: string; secondMajor: string; homeRegion: string }) =>
     call<Me>("PUT", "/api/me/profile", p),
   save: (id: number) => call<void>("POST", `/api/me/saved/${id}`),

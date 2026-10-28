@@ -5,6 +5,9 @@ import com.campusalimi.domain.AppUser;
 import com.campusalimi.domain.AppUserRepository;
 import com.campusalimi.domain.LoginToken;
 import com.campusalimi.domain.LoginTokenRepository;
+import com.campusalimi.domain.SavedItemRepository;
+import com.campusalimi.domain.SentNotificationRepository;
+import com.campusalimi.domain.UserBenefitRepository;
 import com.campusalimi.domain.UserSession;
 import com.campusalimi.domain.UserSessionRepository;
 import jakarta.servlet.http.Cookie;
@@ -33,9 +36,16 @@ public class AuthService {
     private final AppUserRepository users;
     private final LoginTokenRepository tokens;
     private final UserSessionRepository sessions;
+    private final SavedItemRepository savedItems;
+    private final UserBenefitRepository userBenefits;
+    private final SentNotificationRepository sentNotifications;
 
     public AuthService(AppProperties props, MailSender mail, AppUserRepository users, LoginTokenRepository tokens,
-            UserSessionRepository sessions) {
+            UserSessionRepository sessions, SavedItemRepository savedItems, UserBenefitRepository userBenefits,
+            SentNotificationRepository sentNotifications) {
+        this.savedItems = savedItems;
+        this.userBenefits = userBenefits;
+        this.sentNotifications = sentNotifications;
         this.props = props;
         this.mail = mail;
         this.users = users;
@@ -75,6 +85,17 @@ public class AuthService {
         String session = Tokens.random();
         sessions.save(new UserSession(user.getId(), Tokens.hash(session), now.plus(SESSION_TTL)));
         return session;
+    }
+
+    /** 탈퇴. 사용자를 가리키는 것부터 지우고 마지막에 사용자를 지운다. */
+    @Transactional
+    public void deleteAccount(AppUser user) {
+        sessions.deleteByUserId(user.getId());
+        savedItems.deleteByUserId(user.getId());
+        userBenefits.deleteByUserId(user.getId());
+        sentNotifications.deleteByUserId(user.getId());
+        tokens.deleteByEmail(user.getEmail());
+        users.deleteById(user.getId());
     }
 
     @Transactional

@@ -13,10 +13,15 @@ public record AppProperties(
         String adminEmail,
         boolean cookieSecure,
         Mail mail,
+        Digest digest,
         Schedule schedule,
         Notice notice) {
 
     public record Schedule(String cron, String campus, List<Integer> years) {
+    }
+
+    /** 아침 알림 메일 시각. */
+    public record Digest(String cron) {
     }
 
     public record Notice(String cron, int pageSize, List<Category> categories) {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, type Me, type Sido } from "@/lib/api";
 
@@ -16,8 +17,13 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [digestNote, setDigestNote] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
+    const flag = new URLSearchParams(window.location.search).get("digest");
+    if (flag === "off") setDigestNote("아침 알림을 껐어요. 다시 받으려면 아래에서 켜면 돼요.");
+    if (flag === "invalid") setDigestNote("링크가 맞지 않아요. 로그인한 뒤 아래에서 끌 수 있어요.");
     api
       .me()
       .then((m) => {
@@ -79,6 +85,34 @@ export default function Settings() {
     setSaved(false);
   };
 
+  const setDigest = async (enabled: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setMe(await api.setDigest(enabled));
+      setDigestNote(null);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteAccount();
+      setMe(null);
+      setConfirmDelete(false);
+      setDigestNote("계정과 저장한 정보를 모두 지웠어요.");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <main id="main" className="narrow">
       <div className="page-head">
@@ -89,6 +123,12 @@ export default function Settings() {
       {error && (
         <div className="msg error" role="alert">
           {error}
+        </div>
+      )}
+
+      {digestNote && (
+        <div className="msg" role="status">
+          {digestNote}
         </div>
       )}
 
@@ -241,21 +281,22 @@ export default function Settings() {
           </section>
 
           <section className="panel" style={{ marginTop: 16 }}>
-            <h2 className="panel-title">알림</h2>
-            <ul className="side-list">
-              <li>
-                <span>새 장학 공지</span>
-                <span className="badge">준비 중</span>
-              </li>
-              <li>
-                <span>저장한 마감 3일 전</span>
-                <span className="badge">준비 중</span>
-              </li>
-              <li>
-                <span>체크한 혜택 만료 7일 전</span>
-                <span className="badge">준비 중</span>
-              </li>
+            <h2 className="panel-title">아침 알림 메일</h2>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={me.digestEnabled}
+                disabled={busy}
+                onChange={(e) => setDigest(e.target.checked)}
+              />
+              <span>매일 아침 8시, 보낼 것이 있는 날만 한 통</span>
+            </label>
+            <ul className="plain-list">
+              <li>새로 올라온 공지 가운데 꼭 챙길 일정, 내게 맞는 공지, 누구나 낼 수 있는 장학</li>
+              <li>저장한 마감 3일 전</li>
+              <li>체크한 혜택 만료 7일 전</li>
             </ul>
+            <p className="hint">같은 공지는 한 번만 보내요. 메일 맨 아래 링크로도 끌 수 있어요.</p>
           </section>
 
           <section className="panel" style={{ marginTop: 16 }}>
@@ -264,6 +305,32 @@ export default function Settings() {
               <button onClick={logout}>로그아웃</button>
             </div>
           </section>
+
+          <section className="panel danger-zone" style={{ marginTop: 16 }}>
+            <h2 className="panel-title">탈퇴</h2>
+            <p className="muted">
+              이메일, 입학년도, 전공, 연고 지역, 저장한 마감, 체크한 혜택, 알림 기록을 모두 지워요. 되돌릴 수 없어요.
+            </p>
+            {confirmDelete ? (
+              <div className="row" style={{ marginTop: 12 }}>
+                <button className="danger" onClick={deleteAccount} disabled={busy}>
+                  {busy ? "지우는 중…" : "정말 지우기"}
+                </button>
+                <button onClick={() => setConfirmDelete(false)} disabled={busy}>
+                  취소
+                </button>
+              </div>
+            ) : (
+              <p style={{ marginTop: 12 }}>
+                <button className="ghost danger" onClick={() => setConfirmDelete(true)}>
+                  탈퇴하고 내 정보 지우기
+                </button>
+              </p>
+            )}
+          </section>
+          <p className="hint" style={{ marginTop: 16 }}>
+            받는 정보와 보관 기간은 <Link href="/privacy/">개인정보 처리방침</Link>에 있어요.
+          </p>
         </>
       )}
     </main>

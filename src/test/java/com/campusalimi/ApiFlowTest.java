@@ -3,6 +3,9 @@ package com.campusalimi;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campusalimi.auth.ConsoleMailSender;
+import com.campusalimi.digest.DigestService;
+import com.campusalimi.domain.AppUser;
+import com.campusalimi.domain.AppUserRepository;
 import com.campusalimi.domain.DateItem;
 import com.campusalimi.domain.DateItemRepository;
 import com.campusalimi.domain.Notice;
@@ -64,7 +67,7 @@ class ApiFlowTest {
         @Bean
         @Primary
         Clock fixedClock() {
-            return Clock.fixed(Instant.parse("2026-07-05T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+            return Clock.fixed(Instant.parse("2026-07-10T00:00:00Z"), ZoneId.of("Asia/Seoul"));
         }
     }
 
@@ -78,6 +81,10 @@ class ApiFlowTest {
     NoticeRepository notices;
     @Autowired
     DateItemRepository dateItems;
+    @Autowired
+    AppUserRepository users;
+    @Autowired
+    DigestService digest;
 
     @BeforeEach
     void seedNotices() {
@@ -215,6 +222,42 @@ class ApiFlowTest {
         DateItem stored = dateItems.findById(itemId).orElseThrow();
         assertThat(stored.getStatus()).isEqualTo(DateItem.STATUS_REVIEWED);
         assertThat(stored.getTitle()).isEqualTo("수강바구니 (재학생)");
+    }
+
+    @Test
+    void digestGoesOncePerEventAndStopsAfterUnsubscribeOrDelete() {
+        String cookie = login("digest@catholic.ac.kr");
+        AppUser user = users.findByEmail("digest@catholic.ac.kr").orElseThrow();
+        // 픽스처 공지 둘은 방금 들어왔으니 "새 공지"다 (수강신청 공지가 must 구간). 저장한 마감은 3일 안이어야 한다.
+        long itemId = dateItems.findAll().stream().filter(i -> i.getNoticeId() != null)
+                .filter(i -> !i.getEndsOn().isBefore(LocalDate.of(2026, 7, 10)) && !i.getEndsOn().isAfter(LocalDate.of(2026, 7, 13)))
+                .findFirst().orElseThrow().getId();
+        rest.exchange("/api/me/saved/" + itemId, HttpMethod.POST, withCookie(cookie, null), Void.class);
+
+        assertThat(digest.sendTo(user)).isTrue();
+        assertThat(mail.lastTo()).isEqualTo("digest@catholic.ac.kr");
+        assertThat(mail.lastBody()).contains("새로 올라온 공지").contains("저장한 마감").contains("/api/digest/unsubscribe?token=");
+        // 같은 사건은 두 번 가지 않는다.
+        assertThat(digest.sendTo(user)).isFalse();
+
+        // 메일의 링크로 끈다. 로그인 없이.
+        Matcher m = Pattern.compile("/api/digest/unsubscribe\\?token=[A-Za-z0-9]+").matcher(mail.lastBody());
+        assertThat(m.find()).isTrue();
+        ResponseEntity<Void> off = rest.getForEntity(URI.create(rest.getRootUri() + m.group()), Void.class);
+        assertThat(off.getStatusCode()).isEqualTo(HttpStatus.FOUND);
+        assertThat(off.getHeaders().getLocation().toString()).endsWith("/settings/?digest=off");
+        assertThat(users.findById(user.getId()).orElseThrow().isDigestEnabled()).isFalse();
+
+        // 설정에서 다시 켠다.
+        ResponseEntity<Map> on = rest.exchange("/api/me/digest", HttpMethod.PUT, withCookie(cookie, Map.of("enabled", true)), Map.class);
+        assertThat(on.getBody().get("digestEnabled")).isEqualTo(true);
+
+        // 탈퇴하면 계정과 저장이 사라지고 세션도 죽는다.
+        assertThat(rest.exchange("/api/me", HttpMethod.DELETE, withCookie(cookie, null), Void.class).getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(users.findByEmail("digest@catholic.ac.kr")).isEmpty();
+        assertThat(rest.exchange("/api/me", HttpMethod.GET, withCookie(cookie, null), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     private String login(String email) {

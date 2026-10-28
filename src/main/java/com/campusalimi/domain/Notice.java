@@ -133,6 +133,10 @@ public class Notice {
         return reviewReason;
     }
 
+    public OffsetDateTime getFirstSeenAt() {
+        return firstSeenAt;
+    }
+
     public String getBodyText() {
         return bodyText;
     }

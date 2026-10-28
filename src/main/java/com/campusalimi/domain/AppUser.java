@@ -21,6 +21,9 @@ public class AppUser {
     private String major;
     private String secondMajor;
     private String homeRegion;
+    /** 아침 알림 메일을 받는가. 메일 안의 링크 하나로 끈다 (ADR 004). */
+    private boolean digestEnabled = true;
+    private String unsubscribeToken = java.util.UUID.randomUUID().toString().replace("-", "");
     private OffsetDateTime createdAt = OffsetDateTime.now();
     private OffsetDateTime lastLoginAt;
 
@@ -36,6 +39,18 @@ public class AppUser {
         this.major = blankToNull(major);
         this.secondMajor = blankToNull(secondMajor);
         this.homeRegion = blankToNull(homeRegion);
+    }
+
+    public void setDigestEnabled(boolean enabled) {
+        this.digestEnabled = enabled;
+    }
+
+    public boolean isDigestEnabled() {
+        return digestEnabled;
+    }
+
+    public String getUnsubscribeToken() {
+        return unsubscribeToken;
     }
 
     public void touchLogin() {
