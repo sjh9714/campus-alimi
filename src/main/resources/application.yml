@@ -57,3 +57,5 @@ app:
         id: 21
       - name: 장학
         id: 22
+      - name: 취창업
+        id: 23

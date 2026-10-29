@@ -140,6 +140,10 @@ public class DigestService {
         List<SavedLine> savedSoon = new ArrayList<>();
         for (Feed.Section section : built.view().sections()) {
             for (Feed.Card card : section.cards()) {
+                if (card.deadline() == null) {
+                    // 날짜 확인 중인 공지. 날짜 없는 공지는 알림에 넣지 않는다.
+                    continue;
+                }
                 Notice notice = noticeOf(card, built);
                 if (NEW_SECTIONS.contains(section.key()) && notice != null && !already.contains(card.key())
                         && notice.getFirstSeenAt() != null && notice.getFirstSeenAt().isAfter(since)) {

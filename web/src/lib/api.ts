@@ -73,20 +73,22 @@ export type Line = {
   saved: boolean;
 };
 
+/** deadline은 날짜가 그림에만 있어 확인 중인 카드(undated 구간)에서만 null이다. */
 export type Card = {
   key: string;
-  kind: "schedule" | "scholarship" | "academic";
+  kind: "schedule" | "scholarship" | "academic" | "career";
   title: string;
   sourceTitle: string;
   url: string;
-  audience: { scope: Scope; label: string | null; excerpt: string | null };
+  /** grade는 제목·자격 문단에 적힌 학년("2~4학년", "졸업예정자") */
+  audience: { scope: Scope; label: string | null; excerpt: string | null; grade: string | null };
   mine: boolean;
-  deadline: Line;
+  deadline: Line | null;
   next: Line[];
 };
 
 export type Section = {
-  key: "must" | "mine" | "open" | "region" | "group";
+  key: "must" | "mine" | "open" | "undated" | "career" | "region" | "group";
   title: string;
   note: string;
   collapsed: boolean;
@@ -122,6 +124,8 @@ export type ReviewQueue = {
   notices: ReviewNotice[];
   closed: { PAST: number; RESULT: number; STALE: number };
 };
+
+export type FeedbackEntry = { id: number; message: string; createdAt: string };
 
 export type ItemEdit = {
   title: string;
@@ -184,6 +188,8 @@ export const api = {
   logout: () => call<void>("POST", "/api/auth/logout"),
   setDigest: (enabled: boolean) => call<Me>("PUT", "/api/me/digest", { enabled }),
   deleteAccount: () => call<void>("DELETE", "/api/me"),
+  leaveFeedback: (message: string) => call<void>("POST", "/api/feedback", { message }),
+  feedback: () => call<FeedbackEntry[]>("GET", "/api/admin/feedback"),
   meta: () => call<{ contactEmail: string }>("GET", "/api/meta"),
   updateProfile: (p: { entryYear: number | null; major: string; secondMajor: string; homeRegion: string }) =>
     call<Me>("PUT", "/api/me/profile", p),

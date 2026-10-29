@@ -292,12 +292,14 @@ export default function Settings() {
               <span>매일 아침 8시, 보낼 것이 있는 날만 한 통</span>
             </label>
             <ul className="plain-list">
-              <li>새로 올라온 공지 가운데 꼭 챙길 일정, 내게 맞는 공지, 누구나 낼 수 있는 장학</li>
+              <li>새로 올라온 공지 가운데 꼭 챙길 일정, 내게 맞는 공지, 지역·특정 대상이 아닌 장학·학사 공지</li>
               <li>저장한 마감 3일 전</li>
               <li>체크한 혜택 만료 7일 전</li>
             </ul>
             <p className="hint">같은 공지는 한 번만 보내요. 메일 맨 아래 링크로도 끌 수 있어요.</p>
           </section>
+
+          <FeedbackPanel />
 
           <section className="panel" style={{ marginTop: 16 }}>
             <div className="row between">
@@ -309,7 +311,8 @@ export default function Settings() {
           <section className="panel danger-zone" style={{ marginTop: 16 }}>
             <h2 className="panel-title">탈퇴</h2>
             <p className="muted">
-              이메일, 입학년도, 전공, 연고 지역, 저장한 마감, 체크한 혜택, 알림 기록을 모두 지워요. 되돌릴 수 없어요.
+              이메일, 입학년도, 전공, 연고 지역, 저장한 마감, 체크한 혜택, 알림 기록, 남긴 의견을 모두 지워요. 되돌릴 수
+              없어요.
             </p>
             {confirmDelete ? (
               <div className="row" style={{ marginTop: 12 }}>
@@ -334,5 +337,73 @@ export default function Settings() {
         </>
       )}
     </main>
+  );
+}
+
+const FEEDBACK_MAX = 300;
+
+/** "이건 왜 없나요?" 한 줄. 운영자만 읽고, 누가 썼는지는 검수 화면에 나오지 않는다. */
+function FeedbackPanel() {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.leaveFeedback(message.trim());
+      setMessage("");
+      setSent(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="panel" style={{ marginTop: 16 }}>
+      <h2 className="panel-title">이건 왜 없나요?</h2>
+      <p className="muted">찾던 공지나 혜택이 없으면 한 줄 남겨 주세요. 모아서 수집 범위를 정할 때 봐요.</p>
+      <form onSubmit={submit}>
+        <label htmlFor="feedback" className="sr-only">
+          남길 말
+        </label>
+        <div className="row" style={{ flexWrap: "nowrap" }}>
+          <input
+            id="feedback"
+            value={message}
+            maxLength={FEEDBACK_MAX}
+            onChange={(e) => {
+              setMessage(e.target.value);
+              setSent(false);
+            }}
+            placeholder="예: 우리 학과 장학 공지도 보고 싶어요"
+          />
+          <button
+            className="primary"
+            type="submit"
+            disabled={busy || !message.trim()}
+            style={{ padding: "10px 16px", whiteSpace: "nowrap", flexShrink: 0 }}
+          >
+            {busy ? "보내는 중…" : "보내기"}
+          </button>
+        </div>
+      </form>
+      {sent && (
+        <p className="hint" role="status">
+          받았어요. 고마워요.
+        </p>
+      )}
+      {error && (
+        <p className="msg error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

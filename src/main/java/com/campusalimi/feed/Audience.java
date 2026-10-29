@@ -12,8 +12,9 @@ import java.util.regex.Pattern;
  * @param label   화면에 붙는 짧은 말. "전라남도 순천시 연고", "북한이탈청소년"
  * @param regions REGION일 때 지역 후보
  * @param excerpt 본문의 지원자격·신청대상 문단 원문. 없으면 null
+ * @param grade   제목과 자격 문단에 적힌 학년 범위. 범위와 따로 붙는다
  */
-public record Audience(String scope, String label, List<Regions.Region> regions, String excerpt) {
+public record Audience(String scope, String label, List<Regions.Region> regions, String excerpt, GradeTag grade) {
 
     public static final String GENERAL = "GENERAL";
     public static final String REGION = "REGION";
@@ -48,28 +49,29 @@ public record Audience(String scope, String label, List<Regions.Region> regions,
     /** 학사 공지는 학교 안 행정이라 지역·계층 장학 규칙을 대지 않는다. 결과 발표만 거른다. */
     public static Audience classify(String category, String title, String body) {
         String excerpt = excerpt(body);
+        GradeTag grade = GradeTag.of(title, excerpt);
         if (RESULT_TITLE.matcher(title).find()) {
-            return new Audience(RESULT, "결과 발표", List.of(), excerpt);
+            return new Audience(RESULT, "결과 발표", List.of(), excerpt, grade);
         }
         if (!"장학".equals(category)) {
-            return new Audience(GENERAL, null, List.of(), excerpt);
+            return new Audience(GENERAL, null, List.of(), excerpt, grade);
         }
         List<Regions.Region> regions = Regions.inTitle(title);
         if (regions.isEmpty()) {
             regions = Regions.inAudienceSentence(excerpt);
         }
         if (!regions.isEmpty()) {
-            return new Audience(REGION, regions.get(0).label() + " 연고", regions, excerpt);
+            return new Audience(REGION, regions.get(0).label() + " 연고", regions, excerpt, grade);
         }
         Matcher group = GROUP_TITLE.matcher(title);
         if (group.find()) {
-            return new Audience(GROUP, group.group().replaceAll("(장학생|장학금|장학사업)$", ""), List.of(), excerpt);
+            return new Audience(GROUP, group.group().replaceAll("(장학생|장학금|장학사업)$", ""), List.of(), excerpt, grade);
         }
         Matcher field = FIELD_TITLE.matcher(title);
         if (field.find()) {
-            return new Audience(FIELD, field.group(1) + " 분야", List.of(), excerpt);
+            return new Audience(FIELD, field.group(1) + " 분야", List.of(), excerpt, grade);
         }
-        return new Audience(GENERAL, null, List.of(), excerpt);
+        return new Audience(GENERAL, null, List.of(), excerpt, grade);
     }
 
     /** 공지의 대상 범위. 운영자가 고친 값이 있으면 그것이 이긴다. */
@@ -77,13 +79,13 @@ public record Audience(String scope, String label, List<Regions.Region> regions,
         return classify(n.getCategory(), n.getTitle(), n.getBodyText()).overriddenBy(n.getAudienceScope(), n.getAudienceLabel());
     }
 
-    /** 운영자가 고친 범위가 있으면 그것을 쓴다. 발췌문은 그대로 둔다. */
+    /** 운영자가 고친 범위가 있으면 그것을 쓴다. 발췌문과 학년은 그대로 둔다. */
     public Audience overriddenBy(String scope, String label) {
         if (scope == null || scope.isBlank()) {
             return this;
         }
         return new Audience(scope, label == null || label.isBlank() ? null : label.trim(),
-                REGION.equals(scope) ? regions : List.of(), excerpt);
+                REGION.equals(scope) ? regions : List.of(), excerpt, grade);
     }
 
     /** 자격 문단을 원문 그대로 짧게 자른다. 고쳐 쓰지 않는다. */

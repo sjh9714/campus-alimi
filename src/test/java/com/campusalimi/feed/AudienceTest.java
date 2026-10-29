@@ -73,6 +73,35 @@ class AudienceTest {
         assertThat(excerpts.values().stream().filter(e -> e != null)).allMatch(e -> e.length() <= 151);
     }
 
+    /** 학년은 제목과 자격 문단에 글자로 적힌 것만 붙는다. 62건 중 이것들뿐이다. */
+    @Test
+    void gradeTagsComeOnlyFromWrittenRanges() throws Exception {
+        Map<Long, String> tags = new TreeMap<>();
+        for (var n : notices()) {
+            GradeTag tag = classify(n).grade();
+            if (tag != GradeTag.NONE) {
+                tags.put(((Number) n.get("articleNo")).longValue(), tag.label() + " " + tag.grades());
+            }
+        }
+        assertThat(tags).isEqualTo(Map.of(
+                274706L, "졸업예정자 [4]",      // 2026년 8월 졸업대상자 융복합트랙 이수여부 확인
+                275055L, "2~4학년 [2, 3, 4]",   // (2~4학년) 부전공(2차) 신청
+                275089L, "졸업예정자 [4]",      // 졸업대상자 예비 졸업사정
+                276187L, "1학년 [1]"));         // 논산시장학회. 요건을 모두 충족하는 학생 가. 신입생 (지역 장학이라 올리지는 않는다)
+    }
+
+    @Test
+    void ambiguousGradeWordsAreLeftAlone() {
+        assertThat(GradeTag.of("4년제 대학 2학년 1학기 진학 예정자 중 성적 및 소득 요건")).isEqualTo(GradeTag.NONE);
+        assertThat(GradeTag.of("1학년 이상 수료한 학생")).isEqualTo(GradeTag.NONE);
+        assertThat(GradeTag.of("4학기 이상 이수한 자(단, 졸업예정자 혹은 8학기 이상 재학중인 자는 지원 불가)")).isEqualTo(GradeTag.NONE);
+        assertThat(GradeTag.of("2026학년도 2학기 정규학기 재학생")).isEqualTo(GradeTag.NONE);
+        assertThat(GradeTag.of("전 학년 1~4학년")).isEqualTo(GradeTag.NONE);
+        assertThat(GradeTag.of("AI·ICT 분야 전공 대학교(학부) 2학년 이상 재학생").label()).isEqualTo("2~4학년");
+        assertThat(GradeTag.of("2026년도 국내 정규대학교 신입생").label()).isEqualTo("1학년");
+        assertThat(GradeTag.of("신입생 제외")).isEqualTo(GradeTag.NONE);
+    }
+
     @Test
     void universityNamesAndAddressesAreNotRegionConditions() {
         assertThat(Regions.inTitle("2026-겨울학기 가톨릭계 대학 학점교류 안내(서강대, 가톨릭관동대, 대구가톨릭대, 부산가톨릭대)")).isEmpty();

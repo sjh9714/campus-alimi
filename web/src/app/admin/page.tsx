@@ -5,6 +5,7 @@ import {
   ApiError,
   api,
   formatRange,
+  type FeedbackEntry,
   type Item,
   type ItemEdit,
   type ReviewNotice,
@@ -36,7 +37,7 @@ const REASON_TONE: Record<Reason, string> = {
   PARSE_FAILED: "urgent",
 };
 
-const PRIORITY_LABEL = ["모든 재학생 대상", "일반 공지", "지역·특정 대상"] as const;
+const PRIORITY_LABEL = ["모든 재학생 대상", "일반 공지", "지역·특정 대상·취업"] as const;
 
 const SCOPE_LABEL: Record<Scope, string> = {
   GENERAL: "일반",
@@ -98,7 +99,7 @@ export default function Admin() {
         <h1>검수</h1>
         <p className="sub">
           볼 공지 {notices.length}건. 위에서부터 보세요. 모든 재학생이 보는 공지가 먼저, 그림에만 날짜가 있어 학생 화면에
-          아직 안 나가는 공지가 그다음이에요.
+          날짜 없이 &lsquo;확인 중&rsquo;으로 나가는 공지가 그다음이에요.
           {queue && closedTotal > 0 && (
             <>
               {" "}
@@ -178,7 +179,50 @@ export default function Admin() {
           </section>
         </div>
       )}
+      <FeedbackList />
     </main>
+  );
+}
+
+/** 설정 화면의 "이건 왜 없나요?"로 들어온 말. 수집 범위(학과 게시판 등)를 정할 때 본다. */
+function FeedbackList() {
+  const [entries, setEntries] = useState<FeedbackEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api
+      .feedback()
+      .then(setEntries)
+      .catch((e) => setError(e.message));
+  }, []);
+  return (
+    <details className="block fold" style={{ marginTop: 24 }}>
+      <summary>
+        <span className="fold-head">
+          <span className="fold-title">
+            이건 왜 없나요? <span className="count">{entries ? `${entries.length}건` : ""}</span>
+          </span>
+          <span className="note">사용자가 남긴 한 줄. 최근 100건.</span>
+        </span>
+        <ChevronIcon />
+      </summary>
+      {error ? (
+        <p className="msg error" role="alert">
+          {error}
+        </p>
+      ) : entries === null ? (
+        <p className="muted" style={{ padding: 16 }}>불러오는 중…</p>
+      ) : entries.length === 0 ? (
+        <p className="muted" style={{ padding: 16 }}>아직 남긴 말이 없어요.</p>
+      ) : (
+        <ul className="plain-list" style={{ padding: "8px 20px 16px" }}>
+          {entries.map((f) => (
+            <li key={f.id}>
+              <span className="muted">{f.createdAt.slice(0, 10)}</span> {f.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }
 

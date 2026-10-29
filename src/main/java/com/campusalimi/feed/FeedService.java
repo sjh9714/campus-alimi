@@ -53,7 +53,23 @@ public class FeedService {
             noticeById.put(n.getId(), n);
             audiences.put(n.getId(), Audience.of(n));
         }
-        return new Built(Feed.build(upcoming, noticeById, audiences, viewer, user != null, savedIds, props::scheduleUrl),
-                noticeById);
+        List<Notice> undated = undated(today);
+        undated.forEach(n -> audiences.put(n.getId(), Audience.of(n)));
+        return new Built(Feed.build(upcoming, noticeById, audiences, undated, viewer, user != null, savedIds,
+                props::scheduleUrl), noticeById);
     }
+
+    /**
+     * 날짜가 그림에만 있고 운영자가 아직 날짜를 넣지 않은 장학·학사 공지. 검수 큐가 그림 공지를 30일 들고 있으니 같은 기간만 보여준다.
+     * 취업 공지는 기업 포스터가 많아 넣지 않는다.
+     */
+    private List<Notice> undated(LocalDate today) {
+        return notices.findByStatusAndReviewReasonAndPostedOnGreaterThanEqual(Notice.STATUS_NEEDS_REVIEW,
+                Notice.REASON_IMAGE_ONLY, today.minusDays(UNDATED_DAYS)).stream()
+                .filter(n -> "장학".equals(n.getCategory()) || "학사".equals(n.getCategory()))
+                .filter(n -> !dateItems.existsByNoticeId(n.getId()))
+                .toList();
+    }
+
+    static final int UNDATED_DAYS = 30;
 }

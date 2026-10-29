@@ -15,4 +15,6 @@ public interface DateItemRepository extends JpaRepository<DateItem, Long> {
     List<DateItem> findByEndsOnGreaterThanEqual(java.time.LocalDate day);
 
     long countBySourceKind(String sourceKind);
+
+    boolean existsByNoticeId(Long noticeId);
 }

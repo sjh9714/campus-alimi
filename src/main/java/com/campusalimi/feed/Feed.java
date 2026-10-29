@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /**
  * 홈 화면의 순서를 정한다 (ADR 009). 공지 한 건은 카드 한 장이고, 카드는 학생이 할 일(ACTION)이 남아 있을 때만 나온다.
- * 구간은 꼭 챙길 일정 → 내게 맞는 공지 → 장학·학사 공지 → 접힌 지역·특정 대상 장학 순이다. 숨기는 것은 없고 접을 뿐이다.
+ * 구간은 꼭 챙길 일정 → 내게 맞는 공지 → 장학·학사 공지 → 접힌 날짜 확인 중·취업·지역·특정 대상 순이다. 숨기는 것은 없고 접을 뿐이다.
  */
 public final class Feed {
 
@@ -31,10 +31,14 @@ public final class Feed {
             String kind, boolean saved) {
     }
 
-    public record AudienceView(String scope, String label, String excerpt) {
+    /** grade는 제목과 자격 문단에 적힌 학년("2~4학년", "졸업예정자"). 없으면 null. */
+    public record AudienceView(String scope, String label, String excerpt, String grade) {
+        static AudienceView of(Audience a) {
+            return new AudienceView(a.scope(), a.label(), a.excerpt(), a.grade().label());
+        }
     }
 
-    /** kind는 schedule, scholarship, academic. */
+    /** kind는 schedule, scholarship, academic, career. deadline은 날짜 확인 중인 카드에서만 null이다. */
     public record Card(String key, String kind, String title, String sourceTitle, String url, AudienceView audience,
             boolean mine, Line deadline, List<Line> next) {
     }
@@ -51,11 +55,12 @@ public final class Feed {
     /**
      * @param upcoming    오늘 이후에 끝나는 날짜 항목
      * @param notices     항목이 가리키는 공지
-     * @param audiences   공지 id별 대상 범위
+     * @param audiences   공지 id별 대상 범위. undated의 공지도 들어 있다
+     * @param undated     날짜가 그림에만 있어 운영자가 아직 날짜를 넣지 않은 공지 (ADR 003 규칙 2)
      * @param scheduleUrl 학년도별 학사일정 페이지 주소
      */
     public static View build(List<DateItem> upcoming, Map<Long, Notice> notices, Map<Long, Audience> audiences,
-            Viewer viewer, boolean signedIn, Set<Long> saved, IntFunction<String> scheduleUrl) {
+            List<Notice> undated, Viewer viewer, boolean signedIn, Set<Long> saved, IntFunction<String> scheduleUrl) {
         Map<String, List<DateItem>> groups = new LinkedHashMap<>();
         for (DateItem i : upcoming) {
             String key = i.getNoticeId() == null ? "item:" + i.getId() : "notice:" + i.getNoticeId();
@@ -65,6 +70,7 @@ public final class Feed {
         List<Card> must = new ArrayList<>();
         List<Card> mine = new ArrayList<>();
         List<Card> open = new ArrayList<>();
+        List<Card> career = new ArrayList<>();
         List<Card> region = new ArrayList<>();
         List<Card> group = new ArrayList<>();
         for (var entry : groups.entrySet()) {
@@ -76,7 +82,7 @@ public final class Feed {
                 for (DateItem i : items) {
                     if (ItemKind.ACTION.equals(ItemKind.of(i.getTitle()))) {
                         must.add(new Card("item:" + i.getId(), "schedule", i.getTitle(), i.getTitle(),
-                                scheduleUrl.apply(scheduleYear(i)), new AudienceView(Audience.GENERAL, null, null),
+                                scheduleUrl.apply(scheduleYear(i)), new AudienceView(Audience.GENERAL, null, null, null),
                                 false, line(i, null, saved), List.of()));
                     }
                 }
@@ -94,14 +100,14 @@ public final class Feed {
             DateItem deadline = actions.get(0);
             List<Line> next = items.stream().filter(i -> i != deadline).map(i -> line(i, title, saved)).toList();
             boolean isMine = mine(audience, deadline, viewer);
-            Card card = new Card(entry.getKey(), "장학".equals(notice.getCategory()) ? "scholarship" : "academic", title,
-                    notice.getTitle(), notice.getUrl(),
-                    new AudienceView(audience.scope(), audience.label(), audience.excerpt()), isMine,
-                    line(deadline, title, saved), next);
+            Card card = new Card(entry.getKey(), kind(notice), title, notice.getTitle(), notice.getUrl(),
+                    AudienceView.of(audience), isMine, line(deadline, title, saved), next);
             if (isMust(audience, title)) {
                 must.add(card);
             } else if (isMine) {
                 mine.add(card);
+            } else if ("career".equals(card.kind())) {
+                career.add(card);
             } else if (Audience.REGION.equals(audience.scope())) {
                 region.add(card);
             } else if (Audience.GROUP.equals(audience.scope()) || Audience.FIELD.equals(audience.scope())) {
@@ -115,6 +121,17 @@ public final class Feed {
         add(sections, "must", "꼭 챙길 일정", "모든 재학생이 대상이에요.", false, must);
         add(sections, "mine", "내게 맞는 공지", "연고 지역이나 학년·학과가 맞는 공지예요.", false, mine);
         add(sections, "open", "장학·학사 공지", "지원 자격은 카드의 원문 발췌를 확인하세요.", false, open);
+        List<Card> waiting = undated.stream()
+                .filter(n -> audiences.get(n.getId()) != null && !Audience.RESULT.equals(audiences.get(n.getId()).scope()))
+                .sorted(Comparator.comparing(Notice::getPostedOn, Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(n -> new Card("notice:" + n.getId(), kind(n), Titles.clean(n.getTitle()), n.getTitle(), n.getUrl(),
+                        AudienceView.of(audiences.get(n.getId())), false, null, List.of()))
+                .toList();
+        if (!waiting.isEmpty()) {
+            sections.add(new Section("undated", "날짜 확인 중", "날짜가 그림에만 있어 확인하고 있어요. 그동안은 원문에서 직접 확인하세요.",
+                    true, waiting));
+        }
+        add(sections, "career", "취업·창업 공지", "채용과 취업 프로그램이에요. 학교 공지에 올라온 것만 모았어요.", true, career);
         add(sections, "region", viewer.home() == null ? "지역 장학" : "다른 지역 장학",
                 viewer.home() == null ? "설정에서 연고 지역을 고르면 내 지역 장학이 위로 올라와요."
                         : "본인이나 부모님 주소가 그 지역이어야 해요.",
@@ -157,6 +174,10 @@ public final class Feed {
                 && audience.regions().stream().anyMatch(r -> r.covers(viewer.home()))) {
             return true;
         }
+        // 제목·자격 문단에 적힌 학년. 지역·계층 장학은 학년이 맞아도 그 조건이 먼저라 올리지 않는다.
+        if (Audience.GENERAL.equals(audience.scope()) && audience.grade().covers(viewer.grade())) {
+            return true;
+        }
         // 운영자가 검수 때 학년·학과를 붙인 항목 (ADR 008). 둘 다 전체면 모두의 것이라 "내 것"으로 따로 올리지 않는다.
         String g = deadline.getTargetGrade();
         String d = deadline.getTargetDept();
@@ -166,6 +187,14 @@ public final class Feed {
         boolean gradeOk = "ALL".equals(g) || (viewer.grade() != null && g.equals(String.valueOf(viewer.grade())));
         boolean deptOk = "ALL".equals(d) || contains(d, viewer.major()) || contains(d, viewer.secondMajor());
         return gradeOk && deptOk;
+    }
+
+    private static String kind(Notice n) {
+        return switch (n.getCategory() == null ? "" : n.getCategory()) {
+            case "장학" -> "scholarship";
+            case "취창업" -> "career";
+            default -> "academic";
+        };
     }
 
     private static boolean contains(String dept, String major) {

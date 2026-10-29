@@ -7,7 +7,7 @@ import { MonthCalendar } from "./calendar";
 import { BookmarkIcon, ChevronIcon, ExternalIcon } from "./icons";
 
 type Kind = Card["kind"];
-const KIND_LABEL: Record<Kind, string> = { schedule: "학사일정", scholarship: "장학", academic: "학사" };
+const KIND_LABEL: Record<Kind, string> = { schedule: "학사일정", scholarship: "장학", academic: "학사", career: "취업" };
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function Home() {
@@ -45,18 +45,18 @@ export default function Home() {
 
   const allCards = useMemo(() => (feed?.sections ?? []).flatMap((s) => s.cards), [feed]);
   const counts = useMemo(() => {
-    const c: Record<Kind, number> = { schedule: 0, scholarship: 0, academic: 0 };
+    const c: Record<Kind, number> = { schedule: 0, scholarship: 0, academic: 0, career: 0 };
     allCards.forEach((card) => c[card.kind]++);
     return c;
   }, [allCards]);
   const marked = useMemo(
-    () => new Set(allCards.flatMap((c) => [c.deadline, ...c.next].filter((l) => l.kind === "ACTION").map((l) => l.endsOn))),
+    () => new Set(allCards.flatMap((c) => lines(c).filter((l) => l.kind === "ACTION").map((l) => l.endsOn))),
     [allCards],
   );
   const saved = useMemo(
     () =>
       allCards
-        .flatMap((c) => [c.deadline, ...c.next].filter((l) => l.saved).map((l) => ({ card: c, line: l })))
+        .flatMap((c) => lines(c).filter((l) => l.saved).map((l) => ({ card: c, line: l })))
         .sort((a, b) => a.line.endsOn.localeCompare(b.line.endsOn)),
     [allCards],
   );
@@ -68,7 +68,7 @@ export default function Home() {
     s.cards.filter(
       (c) =>
         (kind === "all" || c.kind === kind) &&
-        (!day || [c.deadline, ...c.next].some((l) => l.kind === "ACTION" && l.endsOn === day)),
+        (!day || lines(c).some((l) => l.kind === "ACTION" && l.endsOn === day)),
     );
   const filtering = kind !== "all" || day !== null;
   const visibleSections = (feed?.sections ?? []).map((s) => ({ section: s, cards: filtered(s) })).filter((s) => s.cards.length > 0);
@@ -102,7 +102,7 @@ export default function Home() {
                 <button aria-pressed={kind === "all"} onClick={() => setKind("all")}>
                   전체 <span className="n">{allCards.length}</span>
                 </button>
-                {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
+                {(Object.keys(KIND_LABEL) as Kind[]).filter((k) => k !== "career" || counts.career > 0).map((k) => (
                   <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>
                     {KIND_LABEL[k]} <span className="n">{counts[k]}</span>
                   </button>
@@ -197,6 +197,11 @@ export default function Home() {
   );
 }
 
+/** 카드의 날짜 줄 전부. 날짜 확인 중인 카드는 비어 있다. */
+function lines(c: Card): Line[] {
+  return c.deadline ? [c.deadline, ...c.next] : c.next;
+}
+
 function subtitle(me: Me | null): string {
   if (!me) return "가톨릭대 학사일정과 장학·학사 공지에서 학생이 해야 할 일만 골라 마감 순으로 보여 드려요.";
   const parts = [me.grade ? `${me.grade}학년` : "", me.major ?? "", me.homeRegion ? `${me.homeRegion} 연고` : ""].filter(Boolean);
@@ -255,6 +260,7 @@ function SectionBlock({
 }
 
 function CardRow({ card, canSave, onToggle }: { card: Card; canSave: boolean; onToggle: (l: Line) => void }) {
+  if (!card.deadline) return <UndatedRow card={card} />;
   const line = card.deadline;
   const d = dday(line.endsOn);
   const tone = d <= 3 ? "urgent" : d <= 7 ? "soon" : "";
@@ -293,6 +299,7 @@ function CardRow({ card, canSave, onToggle }: { card: Card; canSave: boolean; on
         <p className="meta">
           <span className={`kind ${card.kind}`}>{KIND_LABEL[card.kind]}</span>
           {audience && <span className="aud">{audience}</span>}
+          {card.audience.grade && <span className="aud">{card.audience.grade}</span>}
         </p>
         {card.audience.excerpt && <Excerpt text={card.audience.excerpt} />}
         {card.next.length > 0 && (
@@ -320,6 +327,34 @@ function CardRow({ card, canSave, onToggle }: { card: Card; canSave: boolean; on
           {line.saved ? "저장됨" : "저장"}
         </button>
       )}
+    </li>
+  );
+}
+
+/** 날짜가 그림에만 있어 아직 날짜를 넣지 못한 공지. 날짜를 추측해 적지 않고 원문으로 보낸다 (ADR 003). */
+function UndatedRow({ card }: { card: Card }) {
+  return (
+    <li className="row-card undated">
+      <div className="when">
+        <span className="pending">확인 중</span>
+      </div>
+      <div className="body">
+        <h3 className="title">
+          <a href={card.url} target="_blank" rel="noreferrer" title={card.sourceTitle}>
+            {card.title}
+            <span className="ext">
+              <ExternalIcon size={14} />
+              <span className="sr-only">(학교 공지 새 창)</span>
+            </span>
+          </a>
+        </h3>
+        <p className="due">날짜가 공지 그림에만 있어요. 원문에서 확인해 주세요.</p>
+        <p className="meta">
+          <span className={`kind ${card.kind}`}>{KIND_LABEL[card.kind]}</span>
+          {card.audience.scope !== "GENERAL" && card.audience.label && <span className="aud">{card.audience.label}</span>}
+          {card.audience.grade && <span className="aud">{card.audience.grade}</span>}
+        </p>
+      </div>
     </li>
   );
 }

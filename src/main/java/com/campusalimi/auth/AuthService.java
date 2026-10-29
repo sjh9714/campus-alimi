@@ -6,6 +6,7 @@ import com.campusalimi.domain.AppUserRepository;
 import com.campusalimi.domain.LoginToken;
 import com.campusalimi.domain.LoginTokenRepository;
 import com.campusalimi.domain.SavedItemRepository;
+import com.campusalimi.domain.FeedbackRepository;
 import com.campusalimi.domain.SentNotificationRepository;
 import com.campusalimi.domain.UserBenefitRepository;
 import com.campusalimi.domain.UserSession;
@@ -39,13 +40,15 @@ public class AuthService {
     private final SavedItemRepository savedItems;
     private final UserBenefitRepository userBenefits;
     private final SentNotificationRepository sentNotifications;
+    private final FeedbackRepository feedback;
 
     public AuthService(AppProperties props, MailSender mail, AppUserRepository users, LoginTokenRepository tokens,
             UserSessionRepository sessions, SavedItemRepository savedItems, UserBenefitRepository userBenefits,
-            SentNotificationRepository sentNotifications) {
+            SentNotificationRepository sentNotifications, FeedbackRepository feedback) {
         this.savedItems = savedItems;
         this.userBenefits = userBenefits;
         this.sentNotifications = sentNotifications;
+        this.feedback = feedback;
         this.props = props;
         this.mail = mail;
         this.users = users;
@@ -94,6 +97,7 @@ public class AuthService {
         savedItems.deleteByUserId(user.getId());
         userBenefits.deleteByUserId(user.getId());
         sentNotifications.deleteByUserId(user.getId());
+        feedback.deleteByUserId(user.getId());
         tokens.deleteByEmail(user.getEmail());
         users.deleteById(user.getId());
     }

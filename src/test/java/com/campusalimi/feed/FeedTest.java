@@ -20,6 +20,7 @@ class FeedTest {
     final List<DateItem> items = new ArrayList<>();
     final Map<Long, Notice> notices = new HashMap<>();
     final Map<Long, Audience> audiences = new HashMap<>();
+    final List<Notice> undated = new ArrayList<>();
 
     Notice notice(String category, String title, String body) {
         Notice n = new Notice(seq, category, title, D.minusDays(3), "", "https://school/" + seq, body, false, "", Notice.REASON_PARSED);
@@ -44,7 +45,7 @@ class FeedTest {
     }
 
     Feed.View build(Feed.Viewer viewer) {
-        return Feed.build(items, notices, audiences, viewer, viewer != Feed.Viewer.ANONYMOUS, Set.of(), y -> "https://calendar/" + y);
+        return Feed.build(items, notices, audiences, undated, viewer, viewer != Feed.Viewer.ANONYMOUS, Set.of(), y -> "https://calendar/" + y);
     }
 
     static Feed.Section section(Feed.View v, String key) {
@@ -143,5 +144,44 @@ class FeedTest {
         assertThat(section(build(new Feed.Viewer(3, "경영학과", null, null)), "mine").cards()).hasSize(1);
         assertThat(build(new Feed.Viewer(1, "경영학과", null, null)).sections()).extracting(Feed.Section::key)
                 .containsExactly("open");
+    }
+
+    @Test
+    void writtenGradeRangeMakesAGeneralNoticeMineButNeverHidesIt() {
+        Notice minor = notice("학사", "[학사행정팀] (2~4학년) 2026학년도 2학기 부전공(2차) 신청/변경 안내", "");
+        item(minor, "신청기간", 3);
+
+        Feed.View third = build(new Feed.Viewer(3, null, null, null));
+        assertThat(section(third, "mine").cards()).hasSize(1);
+        assertThat(section(third, "mine").cards().get(0).audience().grade()).isEqualTo("2~4학년");
+        Feed.View first = build(new Feed.Viewer(1, null, null, null));
+        assertThat(first.sections()).extracting(Feed.Section::key).containsExactly("open");
+        assertThat(section(first, "open").cards().get(0).audience().grade()).isEqualTo("2~4학년");
+    }
+
+    @Test
+    void careerNoticesAreFoldedBelowScholarships() {
+        Notice job = notice("취창업", "[대플-추천채용] 모두투어 - 채용 연계형 인턴 모집", "");
+        item(job, "접수 마감", 5);
+        Notice work = notice("장학", "2027년도 두산연강재단 대학 장학생 선발 안내", "");
+        item(work, "두산연강재단 대학 장학생 선발 안내", 9);
+
+        Feed.View v = build(Feed.Viewer.ANONYMOUS);
+        assertThat(v.sections()).extracting(Feed.Section::key).containsExactly("open", "career");
+        assertThat(section(v, "career").collapsed()).isTrue();
+        assertThat(section(v, "career").cards().get(0).kind()).isEqualTo("career");
+    }
+
+    @Test
+    void imageOnlyNoticesWaitInAFoldedSectionWithoutADate() {
+        Notice poster = notice("학사", "[학사행정팀] 2026-2학기 제1전공생 우선 수강신청 안내", "");
+        undated.add(poster);
+        Notice result = notice("장학", "[학생지원팀] 2026 장학생 최종 선발 결과 안내", "");
+        undated.add(result);
+
+        Feed.Section waiting = section(build(Feed.Viewer.ANONYMOUS), "undated");
+        assertThat(waiting.collapsed()).isTrue();
+        assertThat(waiting.cards()).extracting(Feed.Card::title).containsExactly("2026-2학기 제1전공생 우선 수강신청 안내");
+        assertThat(waiting.cards().get(0).deadline()).isNull();
     }
 }

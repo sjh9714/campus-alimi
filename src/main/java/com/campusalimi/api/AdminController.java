@@ -205,7 +205,9 @@ public class AdminController {
                 .map(i -> ItemsController.toView(i, n, null, null, null, false))
                 .toList();
         String shortTitle = Titles.clean(n.getTitle());
-        int priority = Feed.isMust(audience, shortTitle) ? 0 : Audience.GENERAL.equals(audience.scope()) ? 1 : 2;
+        // 취업 공지는 접힌 구간에 가고 수가 많아 지역·특정 대상과 같이 뒤로 둔다.
+        int priority = Feed.isMust(audience, shortTitle) ? 0
+                : Audience.GENERAL.equals(audience.scope()) && !"취창업".equals(n.getCategory()) ? 1 : 2;
         return new ReviewNotice(n.getId(), n.getArticleNo(), n.getCategory(), n.getTitle(), shortTitle, n.getPostedOn(),
                 n.getUrl(), n.getReviewReason(), n.isHasImages(), n.getAttachments(), n.getStatus(), audience.scope(),
                 audience.label(), audience.excerpt(), n.getAudienceScope() != null, priority, items);

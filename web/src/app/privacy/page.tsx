@@ -52,6 +52,11 @@ export default function Privacy() {
               <td>메일을 보낼 때</td>
               <td>같은 알림을 두 번 보내지 않으려고</td>
             </tr>
+            <tr>
+              <td>&lsquo;이건 왜 없나요?&rsquo;에 남긴 말</td>
+              <td>설정에서 직접 보낼 때</td>
+              <td>모을 공지와 혜택을 정하려고</td>
+            </tr>
           </tbody>
         </table>
         <p>비밀번호, 소득, 성적, 학번, 이름은 받지 않아요. 로그인은 이메일로 온 일회용 링크로만 해요.</p>

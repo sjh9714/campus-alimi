@@ -19,7 +19,7 @@ class DigestBodyTest {
 
     static Feed.Card card(String key, String title, Feed.Line deadline) {
         return new Feed.Card(key, "scholarship", title, title, "https://school/" + key,
-                new Feed.AudienceView(Audience.GENERAL, null, null), false, deadline, List.of());
+                new Feed.AudienceView(Audience.GENERAL, null, null, null), false, deadline, List.of());
     }
 
     static Feed.Line line(long id, String label, LocalDate ends, LocalTime at, boolean saved) {

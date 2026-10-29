@@ -744,6 +744,21 @@ legend + * {
   color: var(--accent);
 }
 
+.kind.career {
+  color: var(--ink-2);
+}
+
+/* 날짜 확인 중인 카드. 숫자 자리에 날짜를 지어내지 않고 상태만 적는다. */
+.when .pending {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #f0ede6;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
 .excerpt {
   margin-top: 10px;
   padding: 10px 12px;

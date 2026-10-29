@@ -181,6 +181,10 @@ class ApiFlowTest {
         Map imageOnly = queue.stream().filter(n -> ((Number) n.get("articleNo")).longValue() == 274128L).findFirst().orElseThrow();
         assertThat(imageOnly.get("reviewReason")).isEqualTo(Notice.REASON_IMAGE_ONLY);
         long noticeId = ((Number) imageOnly.get("id")).longValue();
+        // 날짜를 넣기 전에는 홈의 접힌 "날짜 확인 중"에 날짜 없이 있다.
+        assertThat(undatedKeys()).contains("notice:" + noticeId);
+        assertThat(rest.exchange("/api/admin/feedback", HttpMethod.GET, withCookie(cookie, null), List.class).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
 
         // 그림만 있는 공지에 날짜를 손으로 넣는다.
         ResponseEntity<Map> added = rest.exchange("/api/admin/notices/" + noticeId + "/items", HttpMethod.POST,
@@ -189,6 +193,7 @@ class ApiFlowTest {
         assertThat(added.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(added.getBody().get("sourceKind")).isEqualTo(DateItem.SOURCE_MANUAL);
         assertThat(added.getBody().get("reviewed")).isEqualTo(true);
+        assertThat(undatedKeys()).doesNotContain("notice:" + noticeId);
 
         // 마감 없는 항목은 거부
         ResponseEntity<String> bad = rest.exchange("/api/admin/notices/" + noticeId + "/items", HttpMethod.POST,
@@ -252,12 +257,27 @@ class ApiFlowTest {
         ResponseEntity<Map> on = rest.exchange("/api/me/digest", HttpMethod.PUT, withCookie(cookie, Map.of("enabled", true)), Map.class);
         assertThat(on.getBody().get("digestEnabled")).isEqualTo(true);
 
+        // "이건 왜 없나요?" 한 줄. 빈 글은 받지 않는다. 남긴 글은 탈퇴할 때 같이 지운다(외래 키라 안 지우면 탈퇴가 실패한다).
+        assertThat(rest.exchange("/api/feedback", HttpMethod.POST, withCookie(cookie, Map.of("message", "학과 공지도 보고 싶어요")),
+                Void.class).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(rest.exchange("/api/feedback", HttpMethod.POST, withCookie(cookie, Map.of("message", "  ")), String.class)
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(rest.postForEntity("/api/feedback", Map.of("message", "익명"), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+
         // 탈퇴하면 계정과 저장이 사라지고 세션도 죽는다.
         assertThat(rest.exchange("/api/me", HttpMethod.DELETE, withCookie(cookie, null), Void.class).getStatusCode())
                 .isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(users.findByEmail("digest@catholic.ac.kr")).isEmpty();
         assertThat(rest.exchange("/api/me", HttpMethod.GET, withCookie(cookie, null), String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> undatedKeys() {
+        List<Map> sections = (List<Map>) rest.getForEntity("/api/feed", Map.class).getBody().get("sections");
+        return sections.stream().filter(s -> "undated".equals(s.get("key")))
+                .flatMap(s -> ((List<Map>) s.get("cards")).stream()).map(c -> (String) c.get("key")).toList();
     }
 
     private String login(String email) {

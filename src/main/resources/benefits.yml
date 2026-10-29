@@ -9,6 +9,10 @@
 #   삼성 캠퍼스 스토어(페이지 접근 불가), 유튜브 프리미엄 학생(한국 미제공), Cursor 학생(현재 공식 혜택 없음).
 # - 범위는 대학생 자격으로 받는 것만이다. 나이(청년)만 보는 혜택은 넣지 않는다 (2026-10-26 결정).
 #   그래서 뺀 것: 기후동행카드 청년, K-패스, 청년 주택드림 청약통장, 청년문화예술패스.
+# - 2026-10-29 추가 9개. 확인했지만 넣지 않은 것: Unity Student(한국 제공 여부가 페이지에 없음),
+#   Canva 교육용(대학 단체 라이선스가 있어야 함, 가톨릭대 도입 확인 못 함), Perplexity 학생(공식 페이지 404),
+#   ChatGPT·Claude·Grammarly·Coursera·AWS Educate(한국 대학생 대상 공식 페이지 확인 못 함).
+#   주거안정장학금 금액은 정적 페이지에서 확인하지 못해 적지 않았다.
 
 - slug: github-student-pack
   name: GitHub Student Developer Pack
@@ -181,3 +185,103 @@
   source_url: https://www.catholic.ac.kr/ko/support/tuition_payment_and_returning.do
   verified_on: 2026-10-26
   renewal_rule: 학교 페이지 최종 수정 2026년 9월 9일
+
+- slug: cuk-hospital-discount
+  name: 가톨릭대 부속병원 진료비 감면
+  category: SCHOOL
+  summary: 서울성모병원 등 부속병원 8곳에서 진찰료 100%, 총 진료비 중 개인부담금 30% 감면
+  condition: 학부·대학원 재학생과 휴학생. 졸업생·수료생 제외. 종합검진은 감면 대상 아님. 대전성모병원은 개인부담금 감면 예외
+  how_to: 트리니티에서 '제3자 개인정보이용 동의'를 하면 다음 날부터 감면번호 적용. 대상 병원은 부천·인천·서울·여의도·의정부·은평성모병원, 성빈센트병원, 대전성모병원
+  source_name: 가톨릭대학교 보건실
+  source_url: https://www.catholic.ac.kr/ko/campuslife/health.do
+  verified_on: 2026-10-29
+  renewal_rule: 재학·휴학 중 유지. 학교 페이지 최종 수정 2026년 10월 15일
+
+- slug: kosaf-housing-scholarship
+  name: 한국장학재단 주거안정장학금
+  category: SCHOLARSHIP
+  summary: 원거리 대학에 진학해 주거 비용 부담이 큰 저소득 대학생에게 주는 장학금. 금액은 재단 페이지 확인
+  condition: 대한민국 국적 재학 대학생(대학원생 제외). 당해 1월 1일 기준 만 39세 이하 미혼. 기초생활수급자 또는 차상위계층. 부모 모두의 주소지가 원거리 지역. 참여 대학만
+  how_to: kosaf.go.kr 에서 학기마다 신청. 참여 대학과 지원 불가 지역은 재단 페이지에서 검색
+  source_name: 한국장학재단
+  source_url: https://www.kosaf.go.kr/ko/scholar.do?pg=scholarship05_12_18&naviParam=JH,09,01,00
+  verified_on: 2026-10-29
+  renewal_rule: 학기마다 신청. 청년 월세 지원 등 국가·지자체 주거 지원과 중복 수혜 불가
+
+- slug: kosaf-blue-lighthouse
+  name: 푸른등대 기부장학금
+  category: SCHOLARSHIP
+  summary: 기부처별 저소득층 우수 학생 장학금. 2026년 2학기 기준 학기당 150만~400만 원
+  condition: 기부처마다 자격이 다름. 대부분 학자금 지원구간(예 6구간 이하)과 학과·진로 조건을 봄
+  how_to: kosaf.go.kr 에서 기부처별 '자세히보기'를 확인하고 신청. 2026년 2학기 신청은 9월 10일 마감, 선발·지급은 10월 말 예정
+  source_name: 한국장학재단
+  source_url: https://www.kosaf.go.kr/ko/scholar.do?pg=scholarship05_11_01&naviParam=JH,05,01,08
+  verified_on: 2026-10-29
+  renewal_rule: 기부금에 따라 매년 규모 변동. 계속 지원 대상은 자격 충족 시 별도 신청 없이 계속 지원
+
+- slug: cuk-office365
+  name: 가톨릭대 Microsoft Office 365
+  category: TOOL
+  summary: 학번@catholic.ac.kr 계정으로 MS Office 무상 사용. 다운로드 횟수 제한 없음
+  condition: 재학생(휴학생 포함)과 교직원만. 졸업생·수료생 불가. 학교 웹메일이나 다른 메일로는 인증 불가. 설치 기기 수는 제한 있음
+  how_to: 트리니티 접속 → 사용자 사진 하단 클릭 → 학번@catholic.ac.kr 계정 생성 후 로그인
+  source_name: 가톨릭대학교 IT서비스
+  source_url: https://www.catholic.ac.kr/ko/campuslife/itservice.do
+  verified_on: 2026-10-29
+  renewal_rule: 재학·휴학 중 유지. 학교 페이지 최종 수정 2026년 2월 5일
+
+- slug: cuk-library-elearning
+  name: 가톨릭대 중앙도서관 E-Learning
+  category: SCHOOL
+  summary: 해커스인강 어학(TOEIC·TOEFL 등), 아이티고 IT 자격증, 에듀스파 공무원 강좌를 도서관에서 제공
+  condition: 도서관 홈페이지 로그인 필요. 에듀스파 앱은 ca+학번+@u 아이디로, PC에서 처음 로그인한 다음 날부터 이용
+  how_to: library.catholic.ac.kr > 전자자료 > E-Learning 에서 접속. MATLAB 온라인 교육과정은 @catholic.ac.kr 메일로 가입
+  source_name: 가톨릭대학교 중앙도서관
+  source_url: https://library.catholic.ac.kr/webcontent/info/2
+  verified_on: 2026-10-29
+  renewal_rule: 페이지에 이용 기간 표시 없음. 도서관 안내로 재확인
+
+- slug: cuk-counseling
+  name: 가톨릭대 학생생활상담소
+  category: SCHOOL
+  summary: 개인상담, 집단상담, 심리검사와 해석상담. 비밀 보장, 모든 비용 무료
+  condition: 본교 재학생이면 누구나
+  how_to: 니콜스관 N121호, 02-2164-4640. 일반대학원 대학원상담실(N314호, 10시~17시)도 재학생에게 무료 심리서비스 제공
+  source_name: 가톨릭대학교 학생상담
+  source_url: https://www.catholic.ac.kr/ko/campuslife/counsel.do
+  verified_on: 2026-10-29
+  renewal_rule: 재학 중 이용. 학교 페이지에 최종 수정일 표시 없음
+
+- slug: cuk-isic
+  name: 국제학생증 ISIC (학교 발급)
+  category: SCHOOL
+  summary: 세계 125,000여 곳에서 할인과 학생 서비스를 받는 국제학생증. 학생지원팀에서 발급
+  condition: 가톨릭대학교 재학생·휴학생
+  how_to: 학교 페이지의 '국제학생증 신청하기' 배너에서 신청·결제. 발급처는 학생지원팀(니콜스관 N109호, 02-2164-4732)
+  price: 1년 19,000원 / 2년 32,000원
+  source_name: 가톨릭대학교 학생지원팀
+  source_url: https://www.catholic.ac.kr/ko/support/isic.do
+  verified_on: 2026-10-29
+  renewal_rule: 유효기간 1년 또는 2년. 시작월은 신청 시점부터 3개월 이내에서 선택. 학교 페이지 최종 수정 2025년 12월 24일
+
+- slug: azure-for-students
+  name: Azure for Students
+  category: TOOL
+  summary: Azure 크레딧 USD$100 (12개월 이내 사용), 신용 카드 필요 없음
+  condition: 정규 대학생만 사용 가능. 학교 메일로 등록
+  how_to: azure.microsoft.com/ko-kr/free/students 에서 학교 메일로 등록
+  source_name: Microsoft Azure
+  source_url: https://azure.microsoft.com/ko-kr/free/students
+  verified_on: 2026-10-29
+  renewal_rule: 학생인 경우 학교 메일로 매년 갱신. 크레딧 소진 후 종량제로 업그레이드하지 않으면 사용 중지
+
+- slug: autodesk-education
+  name: Autodesk 교육용 플랜
+  category: TOOL
+  summary: AutoCAD, Fusion, Revit, Inventor, 3ds Max 등 오토데스크 제품을 무료로 1년
+  condition: 최소 연령 요구사항을 충족하고 인가된 교육 기관에 등록된 학생. 교육용으로만, 상업·영리 목적 불가
+  how_to: autodesk.com/kr/education/edu-software/overview 에서 제품을 선택해 자격 확인
+  source_name: Autodesk
+  source_url: https://www.autodesk.com/kr/education/edu-software/overview
+  verified_on: 2026-10-29
+  renewal_rule: 자격 확인 후 1년. 자격이 유지되는 한 갱신 가능
