@@ -110,6 +110,20 @@ class KoreanDateParserTest {
     }
 
     @Test
+    void weekOfMonthIsNotADay() {
+        assertThat(parser.parse("장학금 지급 2026. 11. 1주 예정")).isEmpty();
+        assertThat(parser.parse("11월 2주차 발표")).isEmpty();
+    }
+
+    @Test
+    void twentiethCenturyYearIsReadAsWritten() {
+        // "10월 15일"만 떼어 올해로 읽으면 출생일 조건이 마감처럼 보인다.
+        List<DateRange> r = parser.parse("만 30세 미만(1996년 10월 15일 이후 출생자)");
+        assertThat(r).hasSize(1);
+        assertThat(r.get(0).end()).isEqualTo(LocalDate.of(1996, 10, 15));
+    }
+
+    @Test
     void reversedRangeIsRejected() {
         assertThat(parser.parse("10. 30.(금) ~ 10. 1.(목)")).isEmpty();
     }

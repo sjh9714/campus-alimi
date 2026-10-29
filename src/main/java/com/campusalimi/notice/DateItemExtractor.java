@@ -20,7 +20,8 @@ import org.jsoup.nodes.Element;
  * <li>제목. 장학 공지는 "(10. 14.(수) ~ 11. 13.(금))"처럼 제목에 기간을 적는 경우가 많다.</li>
  * <li>표. 수강신청 일정처럼 구분·학년·일정 열로 된 표는 행마다 항목이 된다. rowspan으로 묶인 라벨은 아래 행에도 붙인다.
  * 한 행에 날짜 열이 둘 이상이면(신청기간 | 결과발표) 열마다 따로 항목을 내고 머리글을 제목에 붙인다. 절대 합치지 않는다.</li>
- * <li>문단. 제목과 표에서 아무것도 못 찾았을 때만, "기간", "마감", "신청" 같은 말이 있는 줄에서 읽는다.</li>
+ * <li>문단. 제목과 표에서 아무것도 못 찾았을 때만, "기간", "마감", "신청" 같은 말이 있는 줄에서 읽는다.
+ * 날짜만 적힌 줄은 바로 윗줄이 "신청기간" 같은 짧은 라벨일 때 그 라벨을 붙여 읽는다.</li>
  * </ol>
  *
  * 못 읽으면 빈 목록을 돌려준다. 추측하지 않는다.
@@ -31,7 +32,10 @@ public final class DateItemExtractor {
     private static final Pattern ALL_GRADES = Pattern.compile("전체\\s*학년|전\\s*학년");
     private static final Pattern GRADE_RANGE = Pattern.compile("[1-4]\\s*[~∼〜～\\-–,·]\\s*[1-4]\\s*학년");
     private static final Pattern LINE_KEYWORD = Pattern.compile("신청|접수|제출|마감|기간|까지|모집|납부|등록");
+    /** 무언가를 해야 하는 날이 아니라 기록용 날짜를 담는 열. 강의 변경표의 "적용일자" 같은 것. */
+    private static final Pattern RECORD_DATE_COLUMN = Pattern.compile("적용\\s*일|시행\\s*일|개정\\s*일|게시\\s*일|작성\\s*일");
     private static final int TITLE_LIMIT = 80;
+    private static final int LABEL_LINE_LIMIT = 20;
 
     private DateItemExtractor() {
     }
@@ -55,8 +59,12 @@ public final class DateItemExtractor {
             items.addAll(fromTable(table, parser, cleanTitle, "table" + tableIndex));
         }
 
+        // 게시일보다 한 해 넘게 앞선 날짜는 마감이 아니다. "1996년 10월 15일 이후 출생자" 같은 조건이나 학칙 개정일이다.
+        LocalDate oldest = view.postedOn().minusYears(1);
+        items.removeIf(i -> i.range().end().isBefore(oldest));
         if (items.isEmpty()) {
             items.addAll(fromLines(view, parser, cleanTitle));
+            items.removeIf(i -> i.range().end().isBefore(oldest));
         }
         return dedupe(items);
     }
@@ -121,6 +129,9 @@ public final class DateItemExtractor {
             for (int c : dateCols) {
                 List<String> titleParts = new ArrayList<>();
                 String columnName = header != null && c < header.size() ? header.get(c) : "";
+                if (RECORD_DATE_COLUMN.matcher(columnName).find()) {
+                    continue;
+                }
                 // 날짜 열이 하나뿐이고 그 열이 첫 열이면 머리글이 곧 제목이다. 날짜 열이 여럿이면 열 이름으로 구분한다.
                 if ((dateCols.size() > 1 || c == 0) && !columnName.isEmpty()) {
                     titleParts.add(columnName);
@@ -142,15 +153,18 @@ public final class DateItemExtractor {
     private static List<ExtractedItem> fromLines(NoticeView view, KoreanDateParser parser, String fallbackTitle) {
         List<ExtractedItem> items = new ArrayList<>();
         int lineIndex = 0;
+        String above = "";
         for (Element e : view.body().select("p, li")) {
             if (!e.select("p, li").isEmpty() && e.children().stream().anyMatch(c -> c.is("p, li"))) {
                 continue;
             }
             String line = e.text().trim();
             lineIndex++;
-            if (line.isEmpty() || !LINE_KEYWORD.matcher(line).find()) {
+            if (line.isEmpty()) {
                 continue;
             }
+            String previous = above;
+            above = line;
             List<DateRange> ranges = parser.parse(line);
             if (ranges.isEmpty()) {
                 continue;
@@ -159,6 +173,10 @@ public final class DateItemExtractor {
             int cut = line.indexOf(merged.matchedText().replaceFirst("^~", ""));
             String lead = cleanLabel(cut > 0 ? line.substring(0, cut) : "");
             lead = lead.replaceAll("[\\s:：\\-–—·~∼〜～(\\[]+$", "").trim();
+            // "신청기간" 줄 아래에 날짜만 적힌 줄이 오는 공지가 있다. 날짜 앞에 글이 없고 바로 윗줄이 날짜 없는 짧은 라벨이면 그 라벨을 쓴다.
+            if (lead.isEmpty() && previous.length() <= LABEL_LINE_LIMIT && parser.parse(previous).isEmpty()) {
+                lead = cleanLabel(previous);
+            }
             // 날짜 앞의 글이 "접수기간", "원본서류 제출"처럼 짧고 그 안에 핵심어가 있을 때만 항목으로 본다.
             // "학생 본인, 부 또는 모 중 1명 이상이 ... 거주" 같은 자격 조건의 날짜는 마감이 아니다.
             if (lead.length() < 2 || lead.length() > 40 || !LINE_KEYWORD.matcher(lead).find()) {

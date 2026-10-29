@@ -15,14 +15,14 @@ import java.util.regex.Pattern;
  * "(~10.26)", "(10/21~10/29)", "2026년 10월 30일", "2026-10-30", "10. 30.까지".
  *
  * <p>읽지 않는 것: 연도·요일·"일"이 없는 월.일 표기가 혼자 있는 것("수업일수 1/4", "3.0 이상"),
- * 점으로 쓴 소수 쌍("평점 2.5 ~ 3.5"), 뒤에 "이상·점·학점·%"가 붙는 것, 끝이 시작보다 앞선 범위.
+ * 점으로 쓴 소수 쌍("평점 2.5 ~ 3.5"), 몇째 주("11. 1주"), 뒤에 "이상·점·학점·%"가 붙는 것, 끝이 시작보다 앞선 범위.
  * 추측하느니 비워 두고 검수로 보내는 편이 낫다. 연도가 없으면 게시일 기준으로 가장 가까운 앞날을 고른다.
  *
  * <p>시각 규칙. 날짜 하나에 시각이 하나면 마감 시각(endsAt)이다. 둘이면 시작·끝이다.
  */
 public final class KoreanDateParser {
 
-    private static final String FULL = "(20\\d{2})\\s*[.\\-/년]\\s*(\\d{1,2})\\s*[.\\-/월]\\s*(\\d{1,2})\\s*\\.?\\s*일?";
+    private static final String FULL = "((?:19|20)\\d{2})\\s*[.\\-/년]\\s*(\\d{1,2})\\s*[.\\-/월]\\s*(\\d{1,2})\\s*\\.?\\s*일?";
     private static final String MD = "(\\d{1,2})\\s*([./월])\\s*(\\d{1,2})\\s*\\.?\\s*(일)?";
     private static final String WEEKDAY = "(\\(\\s*[월화수목금토일]\\s*\\))?";
     private static final String TIME = "(?:\\s*/?\\s*(\\d{1,2}):(\\d{2})(?:\\s*[~∼〜～\\-–]\\s*(\\d{1,2}):(\\d{2}))?)?";
@@ -179,6 +179,10 @@ public final class KoreanDateParser {
             t.time2 = time(m.group(11), m.group(12));
             t.hasUntil = m.group(13) != null;
             if (t.month < 1 || t.month > 12 || t.day < 1 || t.day > 31) {
+                continue;
+            }
+            // "2026. 11. 1주 예정"의 1은 날이 아니라 11월 첫째 주다.
+            if (text.startsWith("주", m.end(m.group(1) != null ? 3 : 6))) {
                 continue;
             }
             if (NUMERIC_TAIL.matcher(text.substring(t.end)).find()) {

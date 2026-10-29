@@ -132,6 +132,54 @@ class NoticeParsersTest {
         assertThat(DateItemExtractor.extract(v)).isEmpty();
     }
 
+    // 아래 본문은 그림만 있는 공지를 받아 적은 글에서 가져왔다(276848, 277004, 276842, 274402).
+
+    @Test
+    void birthDateConditionIsNotADeadline() {
+        List<ExtractedItem> inTable = extract("<table><tr><td>접수기간</td><td>2026년 10월 16일 ~ 11월 16일</td></tr>"
+                + "<tr><td>연령</td><td>만 30세 미만(1996년 10월 15일 이후 출생자)</td></tr></table>");
+        assertThat(inTable).extracting(i -> i.range().end()).containsExactly(LocalDate.of(2026, 11, 16));
+
+        // 표에 출생일만 남고 기간은 문단에 있으면 문단에서 읽어야 한다.
+        List<ExtractedItem> inLine = extract("<p>접수기간 2026년 10월 16일 ~ 11월 16일</p>"
+                + "<table><tr><td>연 령</td><td>만 30세 미만(1996년 10월 15일 이후 출생자)</td></tr></table>");
+        assertThat(inLine).extracting(i -> i.range().end()).containsExactly(LocalDate.of(2026, 11, 16));
+    }
+
+    @Test
+    void labelOnItsOwnLineNamesTheDatesBelow() {
+        List<ExtractedItem> items = extract("<p>신청기간</p><p>2026. 10. 22.(목) 9시 ~ 11. 12.(목) 18시</p>"
+                + "<p>결과발표</p><p>2026년 11월 말 예정</p>");
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).title()).isEqualTo("신청기간");
+        assertThat(items.get(0).range().end()).isEqualTo(LocalDate.of(2026, 11, 12));
+
+        List<ExtractedItem> dashed = extract("<p>모집기간</p><p>2026.<br>10.08(목)<br>–<br>10.29(목)<br>🕒 15:00</p>");
+        assertThat(dashed).hasSize(1);
+        assertThat(dashed.get(0).range().start()).isEqualTo(LocalDate.of(2026, 10, 8));
+        assertThat(dashed.get(0).range().end()).isEqualTo(LocalDate.of(2026, 10, 29));
+    }
+
+    @Test
+    void longSentenceAboveIsNotALabel() {
+        assertThat(extract("<p>신청 자격을 모두 갖춘 학생은 아래 기간 안에 신청서를 제출하시기 바랍니다</p>"
+                + "<p>2026. 10. 22.(목) ~ 11. 12.(목)</p>")).isEmpty();
+    }
+
+    @Test
+    void recordDateColumnIsNotADeadline() {
+        assertThat(extract("<table><tr><td>학부(과)</td><td>교과목명</td><td>변경내용</td><td>적용일자</td></tr>"
+                + "<tr><td>세무회계금융학과</td><td>정부및비영리법인회계(07112)</td><td>폐강</td><td>2026.08.03.</td></tr>"
+                + "<tr><td>영어영문학부</td><td>영어에세이쓰기2(04362)</td><td>폐강</td><td>2026.08.04.</td></tr></table>"))
+                .isEmpty();
+    }
+
+    private static List<ExtractedItem> extract(String body) {
+        NoticeView v = new NoticeView(1L, "장학", "테스트", LocalDate.of(2026, 10, 14), "",
+                org.jsoup.Jsoup.parseBodyFragment(body).body(), body, false, List.of());
+        return DateItemExtractor.extract(v);
+    }
+
     @Test
     void academicYearIsNotAGrade() {
         assertThat(DateItemExtractor.gradeOf("2024학년도 입학생 대상")).isNull();
