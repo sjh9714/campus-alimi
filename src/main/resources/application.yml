@@ -59,3 +59,9 @@ app:
         id: 22
       - name: 취창업
         id: 23
+  # 날짜가 그림에만 있는 공지를 AI가 받아 적는다 (ADR 010). 키가 없으면 꺼진다. 공지 수집(매시 07분) 뒤에 돈다.
+  transcribe:
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: claude-haiku-5-5
+    daily-limit: ${TRANSCRIBE_DAILY_LIMIT:40}
+    cron: "0 20 * * * *"

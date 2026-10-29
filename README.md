@@ -12,7 +12,9 @@
 
 ## 지키는 원칙
 
-출처 링크, 확인일, 마감 또는 만료일이 모두 있는 항목만 화면에 나옵니다. 날짜를 읽지 못한 공지는 추측하지 않고, 운영자가 원문을 보고 날짜를 넣기 전까지 화면에 내보내지 않습니다. 자세한 규칙은 `docs/decisions/003-accuracy.md`에 있습니다.
+출처 링크, 확인일, 마감 또는 만료일이 모두 있는 항목만 화면에 나옵니다. 날짜를 읽지 못한 공지는 추측하지 않고, 운영자가 원문을 보고 날짜를 넣기 전까지 날짜 없이 "날짜 확인 중"에만 둡니다. 자세한 규칙은 `docs/decisions/003-accuracy.md`에 있습니다.
+
+날짜가 그림에만 있는 공지는 AI(Claude Haiku)가 그림 글자를 그대로 받아 적고, 그 글에서 앱의 날짜 규칙이 날짜를 뽑습니다. 뽑은 날짜는 후보로만 저장되고 운영자가 검수 화면에서 승인해야 학생에게 나갑니다. `ANTHROPIC_API_KEY`를 주지 않으면 이 기능은 꺼집니다 (`docs/decisions/010-image-transcription.md`).
 
 ## 실행
 
@@ -22,7 +24,7 @@ JDK 21, Docker가 필요합니다.
 cp .env.example .env            # 로컬 기본값. 비밀번호를 바꾸려면 여기서
 docker compose up -d --wait postgres
 ./gradlew test                  # 저장해 둔 학교 페이지로 파서와 수집기를 검사 (Testcontainers가 Postgres를 띄움)
-RUN_ONCE=all ./gradlew bootRun  # 학사일정과 공지를 한 번 수집하고 종료 (digest 를 주면 아침 알림을 한 번 보냄)
+RUN_ONCE=all ./gradlew bootRun  # 학사일정과 공지를 한 번 수집하고 종료 (digest 를 주면 아침 알림을 한 번 보냄, transcribe 는 그림 받아 적기만)
 ./gradlew bootRun               # 상주 실행. 학사일정은 매일 06:00, 공지는 매시 07분에 수집, 아침 알림은 08:00
 ```
 

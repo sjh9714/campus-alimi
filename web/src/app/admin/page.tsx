@@ -25,7 +25,7 @@ const REASON_LABEL: Record<Reason, string> = {
 
 const REASON_HELP: Record<Reason, string> = {
   PARSED: "날짜를 읽었어요. 맞는지 확인하고 대상을 붙여 주세요.",
-  IMAGE_ONLY: "본문이 그림이에요. 원문을 열어 날짜를 직접 넣어 주세요.",
+  IMAGE_ONLY: "본문이 그림이에요. 그림에서 읽은 날짜가 있으면 원문 그림과 맞는지 보고 검수 완료를 누르세요. 없으면 직접 넣어 주세요.",
   NO_DATE: "글자에서 날짜를 못 찾았어요. 마감이 없는 글이면 바로 검수 완료를 누르세요.",
   PARSE_FAILED: "페이지를 못 읽었어요. 원문을 열어 확인해 주세요.",
 };
@@ -439,7 +439,13 @@ function ItemEditor({
       <div className="item-row">
         <div>
           <div className="row" style={{ gap: 6 }}>
-            {item.reviewed ? <span className="badge ok">확인됨</span> : <span className="badge">자동</span>}
+            {item.reviewed ? (
+              <span className="badge ok">확인됨</span>
+            ) : item.fromImage ? (
+              <span className="badge warn">그림에서 읽음</span>
+            ) : (
+              <span className="badge">자동</span>
+            )}
             <strong>{item.title}</strong>
           </div>
           <p className="muted" style={{ marginTop: 4 }}>

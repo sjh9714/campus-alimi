@@ -143,6 +143,11 @@ public final class DateItemExtractor {
                 }
                 DateRange merged = merge(rangesByCol.get(c));
                 String labelText = String.join(" · ", titleParts);
+                // 라벨 칸이 없으면 "일시 : 2026.11.4.(수)"처럼 날짜 칸 안에서 날짜 앞에 적힌 짧은 글이 라벨이다.
+                if (labelText.isEmpty()) {
+                    String lead = leadOf(cells.get(c), merged);
+                    labelText = lead.length() >= 2 && lead.length() <= 40 ? lead : "";
+                }
                 String title = labelText.isEmpty() ? fallbackTitle : clip(labelText);
                 items.add(new ExtractedItem(title, merged, gradeOf(String.join(" ", labels)), where + ".r" + rowIndex + ".c" + c));
             }
@@ -170,9 +175,7 @@ public final class DateItemExtractor {
                 continue;
             }
             DateRange merged = merge(ranges);
-            int cut = line.indexOf(merged.matchedText().replaceFirst("^~", ""));
-            String lead = cleanLabel(cut > 0 ? line.substring(0, cut) : "");
-            lead = lead.replaceAll("[\\s:：\\-–—·~∼〜～(\\[]+$", "").trim();
+            String lead = leadOf(line, merged);
             // "신청기간" 줄 아래에 날짜만 적힌 줄이 오는 공지가 있다. 날짜 앞에 글이 없고 바로 윗줄이 날짜 없는 짧은 라벨이면 그 라벨을 쓴다.
             if (lead.isEmpty() && previous.length() <= LABEL_LINE_LIMIT && parser.parse(previous).isEmpty()) {
                 lead = cleanLabel(previous);
@@ -185,6 +188,13 @@ public final class DateItemExtractor {
             items.add(new ExtractedItem(lead, merged, gradeOf(line), "line" + lineIndex));
         }
         return items;
+    }
+
+    /** 날짜 앞에 적힌 글. "접수기간 : 10. 1.(수)"에서 "접수기간". */
+    private static String leadOf(String text, DateRange merged) {
+        int cut = text.indexOf(merged.matchedText().replaceFirst("^~", ""));
+        String lead = cleanLabel(cut > 0 ? text.substring(0, cut) : "");
+        return lead.replaceAll("[\\s:：\\-–—·~∼〜～(\\[]+$", "").trim();
     }
 
     /** 한 칸 안에 날짜가 여럿이면(변경기간 2차처럼 날마다 한 줄) 처음부터 끝까지 한 기간으로 합친다. 칸을 넘어 합치지는 않는다. */

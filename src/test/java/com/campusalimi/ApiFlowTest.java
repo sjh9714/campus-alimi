@@ -8,9 +8,12 @@ import com.campusalimi.domain.AppUser;
 import com.campusalimi.domain.AppUserRepository;
 import com.campusalimi.domain.DateItem;
 import com.campusalimi.domain.DateItemRepository;
+import com.campusalimi.domain.ImageTranscriptRepository;
 import com.campusalimi.domain.Notice;
 import com.campusalimi.domain.NoticeRepository;
 import com.campusalimi.fetch.PageFetcher;
+import com.campusalimi.notice.ImageNoticeReader;
+import com.campusalimi.notice.ImageTranscriber;
 import com.campusalimi.notice.NoticeStore;
 import com.campusalimi.notice.NoticeSummary;
 import java.net.URI;
@@ -58,9 +61,24 @@ class ApiFlowTest {
         @Bean
         @Primary
         PageFetcher fetcher() {
-            return url -> {
-                throw new IllegalStateException("no network in this test");
+            return new PageFetcher() {
+                @Override
+                public String get(String url) {
+                    throw new IllegalStateException("no network in this test");
+                }
+
+                @Override
+                public byte[] getBytes(String url) {
+                    // 받아 적기 테스트용 공지의 그림만 1로 표시한다. 다른 공지에는 날짜가 생기지 않게.
+                    return new byte[] { (byte) (url.contains("/copy-") ? 1 : 0) };
+                }
             };
+        }
+
+        @Bean
+        @Primary
+        FakeTranscriber transcriber() {
+            return new FakeTranscriber();
         }
 
         /** 픽스처 공지의 날짜(2026년 7월)가 아직 남아 있는 날로 고정한다. */
@@ -85,6 +103,29 @@ class ApiFlowTest {
     AppUserRepository users;
     @Autowired
     DigestService digest;
+    @Autowired
+    ImageNoticeReader imageReader;
+    @Autowired
+    FakeTranscriber transcriber;
+    @Autowired
+    ImageTranscriptRepository transcripts;
+
+    /** 1로 표시한 그림에는 기간 한 줄을, 나머지에는 빈 글을 돌려준다. 몇 번 불렸는지 센다. */
+    static class FakeTranscriber implements ImageTranscriber {
+        int calls;
+
+        @Override
+        public boolean enabled() {
+            return true;
+        }
+
+        @Override
+        public Result transcribe(byte[] image, String mediaType) {
+            calls++;
+            String text = image[0] == 1 ? "<p>신청기간</p><p>2026. 7. 20.(월) ~ 7. 31.(금)</p>" : "";
+            return new Result(text, "fake", 10, 5);
+        }
+    }
 
     @BeforeEach
     void seedNotices() {
@@ -230,6 +271,45 @@ class ApiFlowTest {
     }
 
     @Test
+    void imageNoticeGetsCandidateDatesThatWaitForReview() {
+        // 다른 테스트가 274128에 손으로 날짜를 넣으므로 번호, 그림 주소, 제목을 바꾼 그림 공지를 따로 넣는다.
+        // 제목에 수강신청이 있으면 홈 맨 앞 구간에 들어가 다른 테스트의 기대가 깨진다.
+        store.save(new NoticeSummary(999001L, "장학", "", LocalDate.of(2026, 7, 27)),
+                Fixtures.read("notice-274128.html").replace("274128", "999001").replace("editor-image/", "editor-image/copy-")
+                        .replace("[학사지원팀] 2026-2학기 제1전공생 우선 수강신청 시행 안내", "[학생지원팀] 테스트 장학생 선발 안내"));
+        long noticeId = notices.findByArticleNo(999001L).orElseThrow().getId();
+
+        imageReader.readPending(LocalDate.of(2026, 7, 10));
+        assertThat(transcripts.findAll()).anyMatch(t -> t.getArticleNo() == 999001L);
+        List<DateItem> items = dateItems.findByNoticeIdOrderByEndsOnAsc(noticeId);
+        assertThat(items).singleElement().satisfies(i -> {
+            assertThat(i.getStatus()).isEqualTo(DateItem.STATUS_CANDIDATE);
+            assertThat(i.getTitle()).isEqualTo("신청기간");
+            assertThat(i.getEndsOn()).isEqualTo(LocalDate.of(2026, 7, 31));
+        });
+        long itemId = items.get(0).getId();
+
+        // 후보는 학생에게 나가지 않는다. 승인 전까지 "날짜 확인 중"에 남는다.
+        assertThat(undatedKeys()).contains("notice:" + noticeId);
+        assertThat(itemIds()).doesNotContain(itemId);
+
+        // 같은 그림은 다시 받아 적지 않는다.
+        int calls = transcriber.calls;
+        imageReader.readPending(LocalDate.of(2026, 7, 10));
+        assertThat(transcriber.calls).isEqualTo(calls);
+
+        // 검수 화면에서는 그림에서 읽은 후보로 보이고, 공지를 검수 완료로 두면 학생에게 나간다.
+        String cookie = login("admin@catholic.ac.kr");
+        Map one = rest.exchange("/api/admin/notices/" + noticeId, HttpMethod.GET, withCookie(cookie, null), Map.class).getBody();
+        Map item = (Map) ((List) one.get("items")).get(0);
+        assertThat(item.get("fromImage")).isEqualTo(true);
+        assertThat(item.get("reviewed")).isEqualTo(false);
+        rest.exchange("/api/admin/notices/" + noticeId + "/reviewed", HttpMethod.POST, withCookie(cookie, null), Map.class);
+        assertThat(undatedKeys()).doesNotContain("notice:" + noticeId);
+        assertThat(itemIds()).contains(itemId);
+    }
+
+    @Test
     void digestGoesOncePerEventAndStopsAfterUnsubscribeOrDelete() {
         String cookie = login("digest@catholic.ac.kr");
         AppUser user = users.findByEmail("digest@catholic.ac.kr").orElseThrow();
@@ -271,6 +351,11 @@ class ApiFlowTest {
         assertThat(users.findByEmail("digest@catholic.ac.kr")).isEmpty();
         assertThat(rest.exchange("/api/me", HttpMethod.GET, withCookie(cookie, null), String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    private List<Long> itemIds() {
+        List<Map> items = rest.getForObject("/api/items?includePast=true", List.class);
+        return items.stream().map(i -> ((Number) i.get("id")).longValue()).toList();
     }
 
     @SuppressWarnings("unchecked")

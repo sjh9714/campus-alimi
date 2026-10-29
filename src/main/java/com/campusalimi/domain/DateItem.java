@@ -20,6 +20,8 @@ public class DateItem {
 
     public static final String STATUS_AUTO = "AUTO";
     public static final String STATUS_REVIEWED = "REVIEWED";
+    /** 공지 그림을 AI가 받아 적은 글에서 읽은 날짜. 운영자가 승인하기 전까지 학생에게 보이지 않는다 (ADR 010). */
+    public static final String STATUS_CANDIDATE = "CANDIDATE";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -75,6 +77,14 @@ public class DateItem {
         item.startsAt = startsAt;
         item.endsAt = endsAt;
         item.targetGrade = targetGrade;
+        return item;
+    }
+
+    /** 그림을 받아 적은 글에서 읽은 항목. 승인 전 후보다. */
+    public static DateItem fromImage(Long noticeId, String naturalKey, String title, LocalDate startsOn,
+            LocalDate endsOn, LocalTime startsAt, LocalTime endsAt, String targetGrade) {
+        DateItem item = fromNotice(noticeId, naturalKey, title, startsOn, endsOn, startsAt, endsAt, targetGrade);
+        item.status = STATUS_CANDIDATE;
         return item;
     }
 

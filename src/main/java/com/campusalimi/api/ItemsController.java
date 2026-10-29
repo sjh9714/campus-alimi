@@ -59,10 +59,11 @@ public class ItemsController {
     /**
      * bucket. 0 = 내 프로필과 맞음, 1 = 전체 대상, 2 = 대상 확인 필요. 숨기는 것은 없다 (ADR 008).
      * reviewed = 사람이 확인한 항목. 아니면 "검수 전"으로 보여준다.
+     * fromImage = 그림을 받아 적은 글에서 읽은 후보. 검수 화면에만 나온다 (ADR 010).
      */
     public record ItemView(long id, String title, LocalDate startsOn, LocalDate endsOn, LocalTime startsAt,
             LocalTime endsAt, String sourceKind, boolean reviewed, String targetGrade, String targetDept,
-            String targetNote, String campus, NoticeRef notice, int bucket, boolean saved) {
+            String targetNote, String campus, NoticeRef notice, int bucket, boolean saved, boolean fromImage) {
     }
 
     public record BenefitView(long id, String slug, String name, String category, String summary, String condition,
@@ -82,7 +83,8 @@ public class ItemsController {
         Set<Long> savedIds = user == null ? Set.of()
                 : saved.findByUserId(user.getId()).stream().map(SavedItem::getDateItemId).collect(Collectors.toSet());
 
-        List<DateItem> items = includePast ? dateItems.findAll() : dateItems.findByEndsOnGreaterThanEqual(today);
+        List<DateItem> items = includePast ? dateItems.findByStatusNot(DateItem.STATUS_CANDIDATE)
+                : dateItems.findByEndsOnGreaterThanEqualAndStatusNot(today, DateItem.STATUS_CANDIDATE);
         Map<Long, Notice> noticeById = new HashMap<>();
         for (Notice n : notices.findAllById(items.stream().map(DateItem::getNoticeId).filter(id -> id != null).toList())) {
             noticeById.put(n.getId(), n);
@@ -99,7 +101,8 @@ public class ItemsController {
                 : new NoticeRef(n.getArticleNo(), n.getTitle(), n.getUrl(), n.getCategory(), n.getReviewReason(), n.getStatus());
         return new ItemView(i.getId(), i.getTitle(), i.getStartsOn(), i.getEndsOn(), i.getStartsAt(), i.getEndsAt(),
                 i.getSourceKind(), DateItem.STATUS_REVIEWED.equals(i.getStatus()), i.getTargetGrade(), i.getTargetDept(),
-                i.getTargetNote(), i.getCampus(), ref, bucket(i, grade, major, second), isSaved);
+                i.getTargetNote(), i.getCampus(), ref, bucket(i, grade, major, second), isSaved,
+                DateItem.STATUS_CANDIDATE.equals(i.getStatus()));
     }
 
     static int bucket(DateItem i, Integer grade, String major, String second) {

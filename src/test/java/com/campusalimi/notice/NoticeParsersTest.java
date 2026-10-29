@@ -161,6 +161,16 @@ class NoticeParsersTest {
     }
 
     @Test
+    void labelInsideTheDateCellNamesTheItem() {
+        List<ExtractedItem> items = extract("<p>인간학 가을 특강</p><table><tr><td>일시 : 2026.11.4.(수), 16:00 ~ 18:00</td></tr>"
+                + "<tr><td>장소 : 콘서트홀</td></tr></table>");
+        assertThat(items).singleElement().satisfies(i -> {
+            assertThat(i.title()).isEqualTo("일시");
+            assertThat(com.campusalimi.feed.ItemKind.of(i.title())).isEqualTo(com.campusalimi.feed.ItemKind.INFO);
+        });
+    }
+
+    @Test
     void longSentenceAboveIsNotALabel() {
         assertThat(extract("<p>신청 자격을 모두 갖춘 학생은 아래 기간 안에 신청서를 제출하시기 바랍니다</p>"
                 + "<p>2026. 10. 22.(목) ~ 11. 12.(목)</p>")).isEmpty();

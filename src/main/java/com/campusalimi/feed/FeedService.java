@@ -46,7 +46,7 @@ public class FeedService {
         Set<Long> savedIds = user == null ? Set.of()
                 : saved.findByUserId(user.getId()).stream().map(SavedItem::getDateItemId).collect(Collectors.toSet());
 
-        List<DateItem> upcoming = dateItems.findByEndsOnGreaterThanEqual(today);
+        List<DateItem> upcoming = dateItems.findByEndsOnGreaterThanEqualAndStatusNot(today, DateItem.STATUS_CANDIDATE);
         Map<Long, Notice> noticeById = new HashMap<>();
         Map<Long, Audience> audiences = new HashMap<>();
         for (Notice n : notices.findAllById(upcoming.stream().map(DateItem::getNoticeId).filter(Objects::nonNull).toList())) {
@@ -61,15 +61,20 @@ public class FeedService {
 
     /**
      * 날짜가 그림에만 있고 운영자가 아직 날짜를 넣지 않은 장학·학사 공지. 검수 큐가 그림 공지를 30일 들고 있으니 같은 기간만 보여준다.
-     * 취업 공지는 기업 포스터가 많아 넣지 않는다.
+     * 그림에서 읽은 후보 날짜만 있는 공지도 승인 전까지는 여기에 둔다.
      */
     private List<Notice> undated(LocalDate today) {
         return notices.findByStatusAndReviewReasonAndPostedOnGreaterThanEqual(Notice.STATUS_NEEDS_REVIEW,
                 Notice.REASON_IMAGE_ONLY, today.minusDays(UNDATED_DAYS)).stream()
-                .filter(n -> "장학".equals(n.getCategory()) || "학사".equals(n.getCategory()))
-                .filter(n -> !dateItems.existsByNoticeId(n.getId()))
+                .filter(FeedService::undatedCategory)
+                .filter(n -> !dateItems.existsByNoticeIdAndStatusNot(n.getId(), DateItem.STATUS_CANDIDATE))
                 .toList();
     }
 
-    static final int UNDATED_DAYS = 30;
+    /** 취업 공지는 기업 포스터가 많아 넣지 않는다. 그림 받아 적기도 같은 공지만 본다 (ADR 010). */
+    public static boolean undatedCategory(Notice n) {
+        return "장학".equals(n.getCategory()) || "학사".equals(n.getCategory());
+    }
+
+    public static final int UNDATED_DAYS = 30;
 }

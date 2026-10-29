@@ -15,7 +15,8 @@ public record AppProperties(
         Mail mail,
         Digest digest,
         Schedule schedule,
-        Notice notice) {
+        Notice notice,
+        Transcribe transcribe) {
 
     public record Schedule(String cron, String campus, List<Integer> years) {
     }
@@ -29,6 +30,21 @@ public record AppProperties(
 
     /** 공지 게시판 분류. 학교 페이지의 srCategoryId 값과 짝이다. */
     public record Category(String name, int id) {
+    }
+
+    /**
+     * 그림 공지 받아 적기 (ADR 010). apiKey가 비면 꺼진다. dailyLimit은 하루에 새로 받아 적는 그림 수의 상한이다.
+     * toString에 키가 찍히지 않게 한다.
+     */
+    public record Transcribe(String apiKey, String model, int dailyLimit, String cron) {
+        public boolean enabled() {
+            return apiKey != null && !apiKey.isBlank();
+        }
+
+        @Override
+        public String toString() {
+            return "Transcribe[enabled=" + enabled() + ", model=" + model + ", dailyLimit=" + dailyLimit + "]";
+        }
     }
 
     /** mode는 console(링크를 로그에 찍음) 또는 smtp. */

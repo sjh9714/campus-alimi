@@ -154,9 +154,9 @@ public class AdminController {
         AppUser admin = auth.requireAdmin(request);
         Notice notice = notices.findById(noticeId).orElseThrow();
         notice.markReviewed(admin.getEmail());
-        // 공지를 검수 완료로 두면 그 아래 자동 항목도 확인한 것으로 본다.
+        // 공지를 검수 완료로 두면 그 아래 자동 항목과 그림에서 읽은 후보도 확인한 것으로 본다.
         for (DateItem item : dateItems.findByNoticeIdOrderByEndsOnAsc(noticeId)) {
-            if (DateItem.STATUS_AUTO.equals(item.getStatus())) {
+            if (DateItem.STATUS_AUTO.equals(item.getStatus()) || DateItem.STATUS_CANDIDATE.equals(item.getStatus())) {
                 item.markReviewed(admin.getEmail());
             }
         }

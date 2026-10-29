@@ -28,6 +28,8 @@ export type Item = {
   notice: NoticeRef | null;
   bucket: 0 | 1 | 2;
   saved: boolean;
+  /** 그림을 받아 적은 글에서 읽은 후보. 검수 화면에만 온다. */
+  fromImage: boolean;
 };
 
 export type Benefit = {

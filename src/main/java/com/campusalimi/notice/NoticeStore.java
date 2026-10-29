@@ -86,6 +86,22 @@ public class NoticeStore {
         return new Saved(notice.getId(), extracted.size(), reason);
     }
 
+    /** 그림을 받아 적은 글에서 읽은 날짜를 후보로 넣는다. 같은 자리의 항목이 이미 있으면 건드리지 않는다. 새로 넣은 수. */
+    @Transactional
+    public int saveImageItems(long noticeId, long articleNo, List<ExtractedItem> extracted) {
+        int added = 0;
+        for (ExtractedItem item : extracted) {
+            String key = "notice:" + articleNo + ":img." + item.where();
+            if (dateItems.findByNaturalKey(key).isEmpty()) {
+                dateItems.save(DateItem.fromImage(noticeId, key, item.title(), item.range().start(), item.range().end(),
+                        item.range().startsAt(), item.range().endsAt(), item.targetGrade()));
+                added++;
+            }
+        }
+        log.info("notice {} image -> {} candidates", articleNo, added);
+        return added;
+    }
+
     /** 본문을 읽지 못한 글도 검수 큐에 넣는다. 조용히 건너뛰면 아무도 모른다. */
     @Transactional
     public void saveFailure(NoticeSummary summary, String html, String error) {
