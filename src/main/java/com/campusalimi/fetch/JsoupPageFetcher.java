@@ -52,6 +52,8 @@ public class JsoupPageFetcher implements PageFetcher {
                     .userAgent(USER_AGENT)
                     .timeout(30_000)
                     .ignoreContentType(true)
+                    // 학교 주소인지 확인한 뒤에 부른다. 다른 곳으로 넘겨도 따라가지 않는다.
+                    .followRedirects(false)
                     .maxBodySize(MAX_IMAGE_BYTES + 1)
                     .execute();
             fetchLogs.save(FetchLog.ok("IMAGE", url, response.statusCode()));

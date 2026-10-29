@@ -138,8 +138,15 @@ public class ImageNoticeReader {
                 false);
     }
 
-    /** 받지 않는 형식이나 너무 큰 그림은 빈 글로 기록해 다시 시도하지 않는다. */
+    /**
+     * 학교 밖 주소, 받지 않는 형식, 너무 큰 그림은 빈 글로 기록해 다시 시도하지 않는다.
+     * 받아 적기가 실패해도 기록한다. 요금이 나갔을 수 있으니 매시간 다시 부르지 않고, 하루 상한에도 센다.
+     * 그림을 받지 못한 것(학교 서버 문제)은 요금이 없으니 기록하지 않고 다음 차례에 다시 시도한다.
+     */
     private ImageTranscriber.Result transcribe(String url) {
+        if (!onSchoolSite(url, props.baseUrl())) {
+            return new ImageTranscriber.Result("", "skipped:host", 0, 0);
+        }
         String mediaType = mediaType(url);
         if (mediaType == null) {
             return new ImageTranscriber.Result("", "skipped:type", 0, 0);
@@ -148,7 +155,20 @@ public class ImageNoticeReader {
         if (bytes.length > JsoupPageFetcher.MAX_IMAGE_BYTES) {
             return new ImageTranscriber.Result("", "skipped:size", 0, 0);
         }
-        return transcriber.transcribe(bytes, mediaType);
+        try {
+            return transcriber.transcribe(bytes, mediaType);
+        } catch (RuntimeException e) {
+            log.warn("transcribe {} failed: {}", url, e.getMessage());
+            return new ImageTranscriber.Result("", "failed", 0, 0);
+        }
+    }
+
+    /** 공지 본문의 그림 주소는 학교가 아닌 곳을 가리킬 수 있다. 서버가 아무 주소나 부르지 않게 학교 주소만 받는다. */
+    static boolean onSchoolSite(String url, String baseUrl) {
+        URI u = URI.create(url);
+        URI base = URI.create(baseUrl);
+        return ("https".equals(u.getScheme()) || "http".equals(u.getScheme()))
+                && base.getHost().equalsIgnoreCase(u.getHost()) && u.getPort() == base.getPort() && u.getUserInfo() == null;
     }
 
     static String mediaType(String url) {
