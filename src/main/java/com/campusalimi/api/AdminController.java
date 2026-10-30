@@ -6,6 +6,10 @@ import com.campusalimi.domain.DateItem;
 import com.campusalimi.domain.DateItemRepository;
 import com.campusalimi.domain.Notice;
 import com.campusalimi.domain.NoticeRepository;
+import com.campusalimi.domain.ReviewEvent;
+import com.campusalimi.domain.ReviewEventRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.campusalimi.feed.Audience;
 import com.campusalimi.feed.Feed;
 import com.campusalimi.feed.Titles;
@@ -36,13 +40,39 @@ public class AdminController {
     private final AuthService auth;
     private final NoticeRepository notices;
     private final DateItemRepository dateItems;
+    private final ReviewEventRepository reviewEvents;
+    private final ObjectMapper json;
     private final Clock clock;
 
-    public AdminController(AuthService auth, NoticeRepository notices, DateItemRepository dateItems, Clock clock) {
+    public AdminController(AuthService auth, NoticeRepository notices, DateItemRepository dateItems,
+            ReviewEventRepository reviewEvents, ObjectMapper json, Clock clock) {
         this.clock = clock;
         this.auth = auth;
         this.notices = notices;
         this.dateItems = dateItems;
+        this.reviewEvents = reviewEvents;
+        this.json = json;
+    }
+
+    /** 검수 기록에 남기는 항목 값. status는 고치기 전이 AUTO(글에서 읽음)인지 CANDIDATE(그림에서 읽음)인지 가른다. */
+    record ItemSnapshot(String naturalKey, String sourceKind, String status, String title, LocalDate startsOn,
+            LocalDate endsOn, LocalTime startsAt, LocalTime endsAt, String targetGrade) {
+        static ItemSnapshot of(DateItem i) {
+            return new ItemSnapshot(i.getNaturalKey(), i.getSourceKind(), i.getStatus(), i.getTitle(), i.getStartsOn(),
+                    i.getEndsOn(), i.getStartsAt(), i.getEndsAt(), i.getTargetGrade());
+        }
+    }
+
+    private void record(Long noticeId, Long itemId, String action, ItemSnapshot before, ItemSnapshot after, String by) {
+        reviewEvents.save(new ReviewEvent(noticeId, itemId, action, write(before), write(after), by));
+    }
+
+    private String write(ItemSnapshot snapshot) {
+        try {
+            return snapshot == null ? null : json.writeValueAsString(snapshot);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /**
@@ -157,9 +187,13 @@ public class AdminController {
         // 공지를 검수 완료로 두면 그 아래 자동 항목과 그림에서 읽은 후보도 확인한 것으로 본다.
         for (DateItem item : dateItems.findByNoticeIdOrderByEndsOnAsc(noticeId)) {
             if (DateItem.STATUS_AUTO.equals(item.getStatus()) || DateItem.STATUS_CANDIDATE.equals(item.getStatus())) {
+                ItemSnapshot before = ItemSnapshot.of(item);
                 item.markReviewed(admin.getEmail());
+                record(noticeId, item.getId(), ReviewEvent.APPROVE, before, ItemSnapshot.of(item), admin.getEmail());
             }
         }
+        // 항목 없이 남는 공지 단위 기록. 항목이 하나도 없으면 "이 공지에는 마감이 없다"는 판단이 된다.
+        record(noticeId, null, ReviewEvent.APPROVE, null, null, admin.getEmail());
         return toReview(notice);
     }
 
@@ -170,8 +204,10 @@ public class AdminController {
         AppUser admin = auth.requireAdmin(request);
         body.validate();
         DateItem item = dateItems.findById(itemId).orElseThrow();
+        ItemSnapshot before = ItemSnapshot.of(item);
         item.review(body.title(), body.startsOn(), body.endsOn(), body.startsAt(), body.endsAt(), body.targetGrade(),
                 body.targetDept(), body.targetNote(), admin.getEmail());
+        record(item.getNoticeId(), item.getId(), ReviewEvent.EDIT, before, ItemSnapshot.of(item), admin.getEmail());
         Notice n = item.getNoticeId() == null ? null : notices.findById(item.getNoticeId()).orElse(null);
         return ItemsController.toView(item, n, null, null, null, false);
     }
@@ -185,14 +221,18 @@ public class AdminController {
         Notice notice = notices.findById(noticeId).orElseThrow();
         DateItem item = dateItems.save(DateItem.manual(notice.getId(), body.title(), body.startsOn(), body.endsOn(),
                 body.startsAt(), body.endsAt(), body.targetGrade(), body.targetDept(), body.targetNote(), admin.getEmail()));
+        record(notice.getId(), item.getId(), ReviewEvent.ADD, null, ItemSnapshot.of(item), admin.getEmail());
         return ItemsController.toView(item, notice, null, null, null, false);
     }
 
     @DeleteMapping("/items/{itemId}")
     @Transactional
     public ResponseEntity<Void> deleteItem(HttpServletRequest request, @PathVariable long itemId) {
-        auth.requireAdmin(request);
-        dateItems.deleteById(itemId);
+        AppUser admin = auth.requireAdmin(request);
+        dateItems.findById(itemId).ifPresent(item -> {
+            record(item.getNoticeId(), item.getId(), ReviewEvent.DELETE, ItemSnapshot.of(item), null, admin.getEmail());
+            dateItems.delete(item);
+        });
         return ResponseEntity.noContent().build();
     }
 

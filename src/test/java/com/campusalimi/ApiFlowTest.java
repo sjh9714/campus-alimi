@@ -9,6 +9,8 @@ import com.campusalimi.domain.AppUserRepository;
 import com.campusalimi.domain.DateItem;
 import com.campusalimi.domain.DateItemRepository;
 import com.campusalimi.domain.ImageTranscriptRepository;
+import com.campusalimi.domain.ReviewEvent;
+import com.campusalimi.domain.ReviewEventRepository;
 import com.campusalimi.domain.Notice;
 import com.campusalimi.domain.NoticeRepository;
 import com.campusalimi.fetch.PageFetcher;
@@ -109,6 +111,8 @@ class ApiFlowTest {
     FakeTranscriber transcriber;
     @Autowired
     ImageTranscriptRepository transcripts;
+    @Autowired
+    ReviewEventRepository reviewEvents;
 
     /** 1로 표시한 그림에는 기간 한 줄을, 나머지에는 빈 글을 돌려준다. 몇 번 불렸는지 센다. */
     static class FakeTranscriber implements ImageTranscriber {
@@ -268,6 +272,23 @@ class ApiFlowTest {
         DateItem stored = dateItems.findById(itemId).orElseThrow();
         assertThat(stored.getStatus()).isEqualTo(DateItem.STATUS_REVIEWED);
         assertThat(stored.getTitle()).isEqualTo("수강바구니 (재학생)");
+
+        // 지운 항목도 기록이 남는다.
+        long manualId = ((Number) added.getBody().get("id")).longValue();
+        rest.exchange("/api/admin/items/" + manualId, HttpMethod.DELETE, withCookie(cookie, null), Void.class);
+
+        // 검수 동작은 모두 고치기 전후 값과 함께 남는다. 정확도를 세는 재료다.
+        List<ReviewEvent> imageEvents = reviewEvents.findByNoticeIdOrderByIdAsc(noticeId);
+        assertThat(imageEvents).extracting(ReviewEvent::getAction)
+                .containsExactly(ReviewEvent.ADD, ReviewEvent.APPROVE, ReviewEvent.DELETE);
+        assertThat(imageEvents.get(0).getAfterJson()).contains("\"endsOn\":\"2026-07-31\"");
+        assertThat(imageEvents.get(1).getDateItemId()).isNull();
+        assertThat(imageEvents.get(2).getBeforeJson()).contains("제1전공생 우선 수강신청");
+        long registrationId = ((Number) registration.get("id")).longValue();
+        ReviewEvent edit = reviewEvents.findByNoticeIdOrderByIdAsc(registrationId).get(0);
+        assertThat(edit.getAction()).isEqualTo(ReviewEvent.EDIT);
+        assertThat(edit.getBeforeJson()).contains("\"status\":\"AUTO\"");
+        assertThat(edit.getAfterJson()).contains("수강바구니 (재학생)");
     }
 
     @Test
