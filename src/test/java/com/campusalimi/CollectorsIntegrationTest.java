@@ -115,7 +115,7 @@ class CollectorsIntegrationTest {
         Notice registration = notices.findByArticleNo(273306L).orElseThrow();
         assertThat(registration.getReviewReason()).isEqualTo(Notice.REASON_PARSED);
         List<DateItem> items = dateItems.findByNoticeIdOrderByEndsOnAsc(registration.getId());
-        assertThat(items).hasSize(8);
+        assertThat(items).hasSize(9);
         assertThat(items).allSatisfy(i -> {
             assertThat(i.getSourceKind()).isEqualTo(DateItem.SOURCE_NOTICE);
             assertThat(i.getStatus()).isEqualTo(DateItem.STATUS_AUTO);
@@ -127,7 +127,7 @@ class CollectorsIntegrationTest {
 
         // 같은 글을 다시 처리해도 항목이 늘지 않는다.
         noticeStore.save(new NoticeSummary(273306L, "학사", "", LocalDate.of(2026, 6, 29)), Fixtures.read("notice-273306.html"));
-        assertThat(dateItems.findByNoticeIdOrderByEndsOnAsc(registration.getId())).hasSize(8);
+        assertThat(dateItems.findByNoticeIdOrderByEndsOnAsc(registration.getId())).hasSize(9);
 
         NoticeCollector.Result second = noticeCollector.collectAll();
         assertThat(second.fetched()).isZero();

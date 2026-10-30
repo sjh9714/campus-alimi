@@ -34,7 +34,8 @@ class TitlesAndKindsTest {
     void onlyWatchingDatesAreInfo() {
         for (String info : new String[] { "서류 합격자 발표", "온라인 영상 면접", "최종 선발 결과 공개", "대학 선발", "근로기간",
                 "계절학기 수업", "가을 학위수여식", "2학기 개시일", "장학증서 수여식", "개설대상과목 공고", "수업기간",
-                "장학금 지급", "장학금 지급 예정", "일시", "일 시", "특강 일시" }) {
+                "장학금 지급", "장학금 지급 예정", "일시", "일 시", "특강 일시", "운영기간", "근무기간", "멘토링 진행기간",
+                "일정 · OT (1시간) · 전문강사 진행", "일정 · 기업분석 특강 (2시간)", "과목조회" }) {
             assertThat(ItemKind.of(info)).as(info).isEqualTo(ItemKind.INFO);
         }
         for (String action : new String[] { "신청기간", "트리니티 신청", "원본서류 제출", "재학생 등록기간", "휴학원 제출기간",

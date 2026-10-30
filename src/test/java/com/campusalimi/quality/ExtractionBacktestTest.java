@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 /**
  * 마감 추출 백테스트 (ADR 011). 정답셋의 공지마다 앱과 같은 코드로 학생이 할 일의 마감(ACTION 종료일)을 뽑아 정답과 비교한다.
  * 글 공지는 저장해 둔 본문을, 그림 공지는 받아 적은 글을 넣는다. 그림은 다시 받아 적지 않으므로 API 비용이 없다.
- * 정밀도나 재현율이 baseline.json보다 떨어지면 실패한다. 규칙을 고쳐 수치가 오르면 baseline을 올린다.
+ * 정밀도나 재현율이 baseline.json보다 떨어지면 실패한다. 규칙을 고쳐 수치가 오르면 baseline을 올린다(소수 셋째 자리에서 내림).
  * 어긋난 날짜는 모두 labels.json의 known에 실패 유형으로 적혀 있어야 한다. 분류되지 않은 새 오류가 생기거나,
  * 고친 오류가 known에 남아 있으면 실패한다. 오류 목록과 실제 동작이 늘 같게 유지된다.
  * 결과는 build/reports/extraction/report.json에 남는다.

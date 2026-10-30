@@ -110,6 +110,33 @@ class KoreanDateParserTest {
     }
 
     @Test
+    void twoDigitYearWithMarkOrWeekday() {
+        assertThat(parser.parse("서류 제출 마감 : `26.10.19(월)")).singleElement()
+                .satisfies(r -> assertThat(r.end()).isEqualTo(LocalDate.of(2026, 10, 19)));
+        assertThat(parser.parse("서류전형 : 26.10.26 (월) ~ 26.11.08 (일)")).singleElement().satisfies(r -> {
+            assertThat(r.start()).isEqualTo(LocalDate.of(2026, 10, 26));
+            assertThat(r.end()).isEqualTo(LocalDate.of(2026, 11, 8));
+        });
+        // 표시도 요일도 없는 두 자리 숫자 셋은 버전 번호일 수 있어 읽지 않는다.
+        assertThat(parser.parse("v26.10.19 배포")).isEmpty();
+    }
+
+    @Test
+    void wordAfterAFullDateIsNotANumericTail() {
+        // "까지" 뒤의 "학점교류"를 "2.5 학점"의 꼬리로 보면 마감을 버린다.
+        assertThat(parser.parse("2026. 10. 30.(금) 15:00까지 학점교류 학점인정 신청서 제출")).singleElement()
+                .satisfies(r -> assertThat(r.end()).isEqualTo(LocalDate.of(2026, 10, 30)));
+    }
+
+    @Test
+    void startOnlyDateIsNotADeadline() {
+        assertThat(parser.parse("신청기간: 10.26(월) 09:00부터 선착순 마감")).isEmpty();
+        assertThat(parser.parse("신청기간 : 2026.10.26.(월) 오전 9시 ~ (멘토링 별 선착순 마감)")).isEmpty();
+        // 끝 날짜가 이어지면 범위다.
+        assertThat(parser.parse("10. 1.(수) 오전 9시 ~ 10. 5.(일)")).hasSize(2);
+    }
+
+    @Test
     void weekOfMonthIsNotADay() {
         assertThat(parser.parse("장학금 지급 2026. 11. 1주 예정")).isEmpty();
         assertThat(parser.parse("11월 2주차 발표")).isEmpty();

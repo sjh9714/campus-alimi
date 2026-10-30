@@ -44,12 +44,14 @@ class NoticeParsersTest {
     }
 
     @Test
-    void courseRegistrationTableBecomesEightItems() {
+    void courseRegistrationTableBecomesEightItemsPlusTheReturnPeriodInText() {
         NoticeView v = NoticeViewParser.parse(Fixtures.read("notice-273306.html"));
         List<ExtractedItem> items = DateItemExtractor.extract(v);
         items.forEach(i -> System.out.println("  " + i));
-        // 수강바구니 2행, 학년별 본 수강신청 4행, 변경기간 2행
-        assertThat(items).hasSize(8);
+        // 수강바구니 2행, 학년별 본 수강신청 4행, 변경기간 2행, 그리고 문단에만 적힌 복학 신청 기간
+        assertThat(items).hasSize(9);
+        assertThat(items.get(8).title()).isEqualTo("2026-2학기 복학 신청 기간");
+        assertThat(items.get(8).range().end()).isEqualTo(LocalDate.of(2026, 7, 10));
 
         ExtractedItem basket = items.get(0);
         assertThat(basket.title()).contains("수강바구니").contains("재학생");
@@ -168,6 +170,23 @@ class NoticeParsersTest {
             assertThat(i.title()).isEqualTo("일시");
             assertThat(com.campusalimi.feed.ItemKind.of(i.title())).isEqualTo(com.campusalimi.feed.ItemKind.INFO);
         });
+    }
+
+    @Test
+    void headingAboveNamesTheDatesBelow() {
+        List<ExtractedItem> items = extract("<h3>3. 신청기간</h3><ol><li><p>2026.09.28.(월) 09:00 ~ 10. 30.(금) 18:00</p></li></ol>");
+        assertThat(items).singleElement().satisfies(i -> {
+            assertThat(i.title()).isEqualTo("신청기간");
+            assertThat(i.range().end()).isEqualTo(LocalDate.of(2026, 10, 30));
+        });
+    }
+
+    @Test
+    void separateDeadlinesInOneCellStaySeparate() {
+        List<ExtractedItem> items = extract("<table><tr><td>구분</td><td>내용</td></tr><tr><td>신청서 접수</td>"
+                + "<td>1차 제출(학점교류 신청) : ~ 2026. 11. 10.(화) 16:00까지<br>2차 제출(수강신청 확정 후) : ~ 2026. 12. 21.(월) 16:00까지</td></tr></table>");
+        assertThat(items).extracting(i -> i.range().end())
+                .containsExactly(LocalDate.of(2026, 11, 10), LocalDate.of(2026, 12, 21));
     }
 
     @Test

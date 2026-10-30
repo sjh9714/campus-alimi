@@ -34,6 +34,8 @@ public final class DateItemExtractor {
     private static final Pattern LINE_KEYWORD = Pattern.compile("신청|접수|제출|마감|기간|까지|모집|납부|등록");
     /** 무언가를 해야 하는 날이 아니라 기록용 날짜를 담는 열. 강의 변경표의 "적용일자" 같은 것. */
     private static final Pattern RECORD_DATE_COLUMN = Pattern.compile("적용\\s*일|시행\\s*일|개정\\s*일|게시\\s*일|작성\\s*일");
+    /** 표가 있어도 문단에서 읽는 줄. 학생이 할 일의 기간이 분명한 이름만 둔다. */
+    private static final Pattern PERIOD_LINE = Pattern.compile("(신청|접수|모집|조사|제출)\\s*기간");
     private static final int TITLE_LIMIT = 80;
     private static final int LABEL_LINE_LIMIT = 20;
 
@@ -64,8 +66,16 @@ public final class DateItemExtractor {
         items.removeIf(i -> i.range().end().isBefore(oldest));
         if (items.isEmpty()) {
             items.addAll(fromLines(view, parser, cleanTitle));
-            items.removeIf(i -> i.range().end().isBefore(oldest));
+        } else {
+            // 표에서 항목이 나와도 "모집기간", "조사기간"처럼 뜻이 분명한 기간 줄은 문단에서 함께 읽는다.
+            // 표는 프로그램 일정이고 신청 기간은 문단에만 적힌 공지가 있다. 표에 이미 있는 마감일은 다시 넣지 않는다.
+            Set<LocalDate> ends = new java.util.HashSet<>();
+            items.forEach(i -> ends.add(i.range().end()));
+            fromLines(view, parser, cleanTitle).stream()
+                    .filter(i -> PERIOD_LINE.matcher(i.title()).find() && !ends.contains(i.range().end()))
+                    .forEach(items::add);
         }
+        items.removeIf(i -> i.range().end().isBefore(oldest));
         return dedupe(items);
     }
 
@@ -141,15 +151,22 @@ public final class DateItemExtractor {
                     // 열 이름을 모르면 어느 날짜가 마감인지 알 수 없다. 추측하지 않고 검수로 보낸다.
                     continue;
                 }
-                DateRange merged = merge(rangesByCol.get(c));
-                String labelText = String.join(" · ", titleParts);
-                // 라벨 칸이 없으면 "일시 : 2026.11.4.(수)"처럼 날짜 칸 안에서 날짜 앞에 적힌 짧은 글이 라벨이다.
-                if (labelText.isEmpty()) {
-                    String lead = leadOf(cells.get(c), merged);
-                    labelText = lead.length() >= 2 && lead.length() <= 40 ? lead : "";
+                // "1차 제출 ~11.10 / 2차 제출 ~12.21"처럼 한 칸에 끝 날짜만 여럿이면 마감이 여럿이다. 합치지 않는다.
+                List<DateRange> found = rangesByCol.get(c);
+                boolean separate = found.size() > 1 && found.stream().allMatch(r -> r.start() == null);
+                List<DateRange> parts = separate ? found : List.of(merge(found));
+                for (int k = 0; k < parts.size(); k++) {
+                    DateRange range = parts.get(k);
+                    String labelText = String.join(" · ", titleParts);
+                    // 라벨 칸이 없으면 "일시 : 2026.11.4.(수)"처럼 날짜 칸 안에서 날짜 앞에 적힌 짧은 글이 라벨이다.
+                    if (labelText.isEmpty()) {
+                        String lead = leadOf(cells.get(c), range);
+                        labelText = lead.length() >= 2 && lead.length() <= 40 ? lead : "";
+                    }
+                    String title = labelText.isEmpty() ? fallbackTitle : clip(labelText);
+                    items.add(new ExtractedItem(title, range, gradeOf(String.join(" ", labels)),
+                            where + ".r" + rowIndex + ".c" + c + (separate ? "." + k : "")));
                 }
-                String title = labelText.isEmpty() ? fallbackTitle : clip(labelText);
-                items.add(new ExtractedItem(title, merged, gradeOf(String.join(" ", labels)), where + ".r" + rowIndex + ".c" + c));
             }
         }
         return items;
@@ -159,7 +176,8 @@ public final class DateItemExtractor {
         List<ExtractedItem> items = new ArrayList<>();
         int lineIndex = 0;
         String above = "";
-        for (Element e : view.body().select("p, li")) {
+        // 제목 태그도 줄로 본다. "<h3>3. 신청기간</h3>" 아래에 날짜만 적힌 공지가 있다.
+        for (Element e : view.body().select("p, li, h1, h2, h3, h4, h5, h6")) {
             if (!e.select("p, li").isEmpty() && e.children().stream().anyMatch(c -> c.is("p, li"))) {
                 continue;
             }

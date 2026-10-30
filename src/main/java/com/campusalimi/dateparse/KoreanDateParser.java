@@ -12,25 +12,35 @@ import java.util.regex.Pattern;
  * 학교 공지에 흔한 한국어 날짜 표기를 읽는다.
  *
  * <p>읽는 것: "2026. 7. 7.(화) ~ 7. 12.(일) / 09:00 ~ 23:59", "10. 14.(수) ~ 11. 13.(금) 18:00까지",
- * "(~10.26)", "(10/21~10/29)", "2026년 10월 30일", "2026-10-30", "10. 30.까지".
+ * "(~10.26)", "(10/21~10/29)", "2026년 10월 30일", "2026-10-30", "10. 30.까지", "`26.10.19", "26.10.26 (월)".
  *
  * <p>읽지 않는 것: 연도·요일·"일"이 없는 월.일 표기가 혼자 있는 것("수업일수 1/4", "3.0 이상"),
- * 점으로 쓴 소수 쌍("평점 2.5 ~ 3.5"), 몇째 주("11. 1주"), 뒤에 "이상·점·학점·%"가 붙는 것, 끝이 시작보다 앞선 범위.
+ * 점으로 쓴 소수 쌍("평점 2.5 ~ 3.5"), 몇째 주("11. 1주"), 뒤에 "이상·점·학점·%"가 붙는 것, 끝이 시작보다 앞선 범위,
+ * "10.26(월) 09:00부터"처럼 시작만 있는 날짜, 표시도 요일도 없는 두 자리 연도("v26.10.19").
  * 추측하느니 비워 두고 검수로 보내는 편이 낫다. 연도가 없으면 게시일 기준으로 가장 가까운 앞날을 고른다.
  *
  * <p>시각 규칙. 날짜 하나에 시각이 하나면 마감 시각(endsAt)이다. 둘이면 시작·끝이다.
  */
 public final class KoreanDateParser {
 
-    private static final String FULL = "((?:19|20)\\d{2})\\s*[.\\-/년]\\s*(\\d{1,2})\\s*[.\\-/월]\\s*(\\d{1,2})\\s*\\.?\\s*일?";
-    private static final String MD = "(\\d{1,2})\\s*([./월])\\s*(\\d{1,2})\\s*\\.?\\s*(일)?";
-    private static final String WEEKDAY = "(\\(\\s*[월화수목금토일]\\s*\\))?";
-    private static final String TIME = "(?:\\s*/?\\s*(\\d{1,2}):(\\d{2})(?:\\s*[~∼〜～\\-–]\\s*(\\d{1,2}):(\\d{2}))?)?";
-    private static final String UNTIL = "(\\s*까지)?";
+    private static final String FULL = "(?<y>(?:19|20)\\d{2})\\s*[.\\-/년]\\s*(?<m>\\d{1,2})\\s*[.\\-/월]\\s*(?<d>\\d{1,2})\\s*\\.?\\s*일?";
+    /** 두 자리 연도. "`26.10.19"처럼 앞에 표시가 있거나 "26.10.26 (월)"처럼 요일이 붙을 때만 믿는다. */
+    private static final String SHORT = "(?:[`'’‘]\\s*(?<ym>\\d{2})|(?<yw>\\d{2})(?=\\s*\\.\\s*\\d{1,2}\\s*\\.\\s*\\d{1,2}\\s*\\.?\\s*\\(\\s*[월화수목금토일]\\s*\\)))"
+            + "\\s*\\.\\s*(?<sm>\\d{1,2})\\s*\\.\\s*(?<sd>\\d{1,2})\\s*\\.?";
+    private static final String MD = "(?<mm>\\d{1,2})\\s*(?<sep>[./월])\\s*(?<dd>\\d{1,2})\\s*\\.?\\s*(?<daySuffix>일)?";
+    private static final String WEEKDAY = "(?<weekday>\\(\\s*[월화수목금토일]\\s*\\))?";
+    private static final String TIME = "(?:\\s*/?\\s*(?<h1>\\d{1,2}):(?<n1>\\d{2})(?:\\s*[~∼〜～\\-–]\\s*(?<h2>\\d{1,2}):(?<n2>\\d{2}))?)?";
+    private static final String UNTIL = "(?<until>\\s*까지)?";
 
     private static final Pattern TOKEN = Pattern.compile(
-            "(?<![\\d:])(?:" + FULL + "|" + MD + ")\\s*" + WEEKDAY + TIME + UNTIL);
-    private static final Pattern CONNECTOR = Pattern.compile("^\\s*(?:[~∼〜～\\-–—]|부터)\\s*$");
+            "(?<![\\d:])(?:" + FULL + "|" + SHORT + "|" + MD + ")\\s*" + WEEKDAY + TIME + UNTIL);
+    private static final Pattern CONNECTOR = Pattern.compile("^\\s*(?:[~∼〜～\\-–—]|부터|부터\\s*[~∼〜～\\-–—])\\s*$");
+    /**
+     * 뒤에 끝 날짜 없이 "부터"나 물결만 오는 날짜는 시작일이다. 마감으로 쓰지 않는다.
+     * "10.26(월) 09:00부터 선착순", "2026.10.26.(월) 오전 9시 ~ (선착순 마감)".
+     */
+    private static final Pattern START_ONLY = Pattern.compile(
+            "^\\s*(?:부터|(?:오전|오후)?\\s*(?:\\d{1,2}\\s*시)?\\s*[~∼〜～]\\s*(?:$|[(（]|[^\\s\\d`'’‘]))");
     private static final Pattern LEADING_TILDE = Pattern.compile("[~∼〜～]\\s*$");
     /** 날짜가 아니라 수치를 뜻하는 뒷말. "3.0 이상", "4.5점", "2.5 학점", "12.5%" */
     private static final Pattern NUMERIC_TAIL = Pattern.compile("^\\s*(?:이상|이하|초과|미만|점|학점|%|배|kg|km|원)");
@@ -62,6 +72,10 @@ public final class KoreanDateParser {
                     i += 2;
                     continue;
                 }
+            }
+            if (START_ONLY.matcher(text.substring(t.end)).find()) {
+                i++;
+                continue;
             }
             String before = text.substring(Math.max(0, t.start - 4), t.start);
             boolean endOnly = LEADING_TILDE.matcher(before).find();
@@ -164,28 +178,37 @@ public final class KoreanDateParser {
             Token t = new Token();
             t.start = m.start();
             t.end = m.end();
-            if (m.group(1) != null) {
-                t.year = Integer.parseInt(m.group(1));
-                t.month = Integer.parseInt(m.group(2));
-                t.day = Integer.parseInt(m.group(3));
+            String dayGroup;
+            if (m.group("y") != null) {
+                t.year = Integer.parseInt(m.group("y"));
+                t.month = Integer.parseInt(m.group("m"));
+                t.day = Integer.parseInt(m.group("d"));
+                dayGroup = "d";
+            } else if (m.group("sm") != null) {
+                t.year = 2000 + Integer.parseInt(m.group("ym") != null ? m.group("ym") : m.group("yw"));
+                t.month = Integer.parseInt(m.group("sm"));
+                t.day = Integer.parseInt(m.group("sd"));
+                dayGroup = "sd";
             } else {
-                t.month = Integer.parseInt(m.group(4));
-                t.dotSeparated = ".".equals(m.group(5));
-                t.day = Integer.parseInt(m.group(6));
-                t.hasDaySuffix = m.group(7) != null;
+                t.month = Integer.parseInt(m.group("mm"));
+                t.dotSeparated = ".".equals(m.group("sep"));
+                t.day = Integer.parseInt(m.group("dd"));
+                t.hasDaySuffix = m.group("daySuffix") != null;
+                dayGroup = "dd";
             }
-            t.hasWeekday = m.group(8) != null;
-            t.time1 = time(m.group(9), m.group(10));
-            t.time2 = time(m.group(11), m.group(12));
-            t.hasUntil = m.group(13) != null;
+            t.hasWeekday = m.group("weekday") != null;
+            t.time1 = time(m.group("h1"), m.group("n1"));
+            t.time2 = time(m.group("h2"), m.group("n2"));
+            t.hasUntil = m.group("until") != null;
             if (t.month < 1 || t.month > 12 || t.day < 1 || t.day > 31) {
                 continue;
             }
             // "2026. 11. 1주 예정"의 1은 날이 아니라 11월 첫째 주다.
-            if (text.startsWith("주", m.end(m.group(1) != null ? 3 : 6))) {
+            if (text.startsWith("주", m.end(dayGroup))) {
                 continue;
             }
-            if (NUMERIC_TAIL.matcher(text.substring(t.end)).find()) {
+            // 연도·요일·"까지"가 붙은 날짜는 뒤에 무엇이 와도 날짜다. "까지 학점교류"의 "학점"은 수치가 아니다.
+            if (t.year == null && !t.hasWeekday && !t.hasUntil && NUMERIC_TAIL.matcher(text.substring(t.end)).find()) {
                 continue;
             }
             tokens.add(t);
