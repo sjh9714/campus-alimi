@@ -131,11 +131,16 @@ public class ImageNoticeReader {
             texts.add(r.text());
             fresh++;
         }
+        return new Read(fresh, store.saveImageItems(n.getId(), view.articleNo(), extractFromTranscripts(view, texts)),
+                false);
+    }
+
+    /** 받아 적은 글을 공지 본문 자리에 넣고 글 공지와 같은 규칙으로 날짜를 뽑는다. 품질 백테스트도 이 메서드를 쓴다. */
+    public static List<ExtractedItem> extractFromTranscripts(NoticeView view, List<String> texts) {
         String html = String.join("\n", texts).replace("```html", "").replace("```", "");
         NoticeView transcribed = new NoticeView(view.articleNo(), view.category(), view.title(), view.postedOn(),
                 view.writer(), Jsoup.parseBodyFragment(html).body(), html, false, List.of());
-        return new Read(fresh, store.saveImageItems(n.getId(), view.articleNo(), DateItemExtractor.extract(transcribed)),
-                false);
+        return DateItemExtractor.extract(transcribed);
     }
 
     /**
