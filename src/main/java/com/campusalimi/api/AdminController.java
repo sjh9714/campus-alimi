@@ -145,8 +145,10 @@ public class AdminController {
         if (Audience.RESULT.equals(audience.scope())) {
             return CLOSED_RESULT;
         }
-        if (!items.isEmpty()) {
-            return items.stream().allMatch(i -> i.getEndsOn().isBefore(today)) ? CLOSED_PAST : null;
+        // 그림에서 읽은 후보는 운영자가 아직 보지 않은 날짜다. 후보만 있는 공지는 날짜 없는 공지처럼 다룬다.
+        List<DateItem> settled = items.stream().filter(i -> !DateItem.STATUS_CANDIDATE.equals(i.getStatus())).toList();
+        if (!settled.isEmpty()) {
+            return settled.stream().allMatch(i -> i.getEndsOn().isBefore(today)) ? CLOSED_PAST : null;
         }
         int keepDays = Notice.REASON_NO_DATE.equals(n.getReviewReason()) ? 14 : 30;
         return n.getPostedOn() != null && n.getPostedOn().isBefore(today.minusDays(keepDays)) ? CLOSED_STALE : null;

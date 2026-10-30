@@ -109,30 +109,61 @@ public class ImageNoticeReader {
 
     private Read read(Notice n, LocalDate today) {
         NoticeView view = NoticeViewParser.parse(raws.findById(n.getArticleNo()).orElseThrow().getHtml());
-        URI base = URI.create(props.baseUrl() + "/");
-        List<String> urls = view.body().select("img").eachAttr("src").stream()
-                .filter(s -> !s.isBlank() && !s.startsWith("data:"))
-                .map(s -> base.resolve(s.trim()).toString())
-                .distinct().limit(MAX_IMAGES_PER_NOTICE).toList();
         List<String> texts = new ArrayList<>();
         int fresh = 0;
-        for (String url : urls) {
+        // 이번에 읽지 못한 그림(학교 서버나 API의 일시 오류)이 있으면 후보를 저장하지 않고 다음 차례에 다시 본다.
+        // 그 사이 받아 적은 그림은 캐시에 남으니 다시 돈이 들지 않는다.
+        boolean pending = false;
+        for (String url : imageUrls(view)) {
             Optional<ImageTranscript> cached = transcripts.findById(url);
             if (cached.isPresent()) {
                 texts.add(cached.get().getText());
                 continue;
             }
-            if (transcripts.countByCreatedAtAfter(today.atStartOfDay(SEOUL).toOffsetDateTime()) >= props.transcribe().dailyLimit()) {
+            String skip = skipReason(url);
+            if (skip == null && transcripts.countByCreatedAtAfterAndInputTokensGreaterThan(
+                    today.atStartOfDay(SEOUL).toOffsetDateTime(), 0L) >= props.transcribe().dailyLimit()) {
                 return new Read(fresh, 0, true);
             }
-            ImageTranscriber.Result r = transcribe(url);
+            ImageTranscriber.Result r;
+            try {
+                r = skip != null ? new ImageTranscriber.Result("", skip, 0, 0) : transcribe(url);
+            } catch (RuntimeException e) {
+                log.warn("image {} will be retried: {}", url, e.getMessage());
+                pending = true;
+                continue;
+            }
             transcripts.save(new ImageTranscript(url, n.getArticleNo(), r.text(), r.model(), r.inputTokens(),
                     r.outputTokens()));
             texts.add(r.text());
-            fresh++;
+            fresh += skip == null ? 1 : 0;
+        }
+        if (pending) {
+            return new Read(fresh, 0, false);
         }
         return new Read(fresh, store.saveImageItems(n.getId(), view.articleNo(), extractFromTranscripts(view, texts)),
                 false);
+    }
+
+    /** 본문 그림 주소. 학교 주소의 http는 https로 맞춘다(학교가 https로 넘기고, 넘기는 응답은 따라가지 않는다). 깨진 주소는 뺀다. */
+    private List<String> imageUrls(NoticeView view) {
+        URI base = URI.create(props.baseUrl() + "/");
+        List<String> urls = new ArrayList<>();
+        for (String src : view.body().select("img").eachAttr("src")) {
+            if (src.isBlank() || src.startsWith("data:")) {
+                continue;
+            }
+            try {
+                URI u = base.resolve(src.trim());
+                if ("http".equals(u.getScheme()) && base.getHost().equalsIgnoreCase(u.getHost())) {
+                    u = new URI(base.getScheme(), null, u.getHost(), base.getPort(), u.getPath(), u.getQuery(), null);
+                }
+                urls.add(u.toString());
+            } catch (IllegalArgumentException | java.net.URISyntaxException e) {
+                log.warn("bad image src in notice {}: {}", view.articleNo(), src);
+            }
+        }
+        return urls.stream().distinct().limit(MAX_IMAGES_PER_NOTICE).toList();
     }
 
     /** 받아 적은 글을 공지 본문 자리에 넣고 글 공지와 같은 규칙으로 날짜를 뽑는다. 품질 백테스트도 이 메서드를 쓴다. */
@@ -143,28 +174,41 @@ public class ImageNoticeReader {
         return DateItemExtractor.extract(transcribed);
     }
 
+    /** 받아 보기 전에 건너뛸 그림. 학교 밖 주소와 받지 않는 형식이다. */
+    private String skipReason(String url) {
+        if (!onSchoolSite(url, props.baseUrl())) {
+            return "skipped:host";
+        }
+        return mediaType(url) == null ? "skipped:type" : null;
+    }
+
     /**
-     * 학교 밖 주소, 받지 않는 형식, 너무 큰 그림은 빈 글로 기록해 다시 시도하지 않는다.
-     * 받아 적기가 실패해도 기록한다. 요금이 나갔을 수 있으니 매시간 다시 부르지 않고, 하루 상한에도 센다.
-     * 그림을 받지 못한 것(학교 서버 문제)은 요금이 없으니 기록하지 않고 다음 차례에 다시 시도한다.
+     * 그림을 받아 받아 적는다. 다시 해도 소용없는 경우는 빈 글로 기록해 다시 시도하지 않는다.
+     * 학교 서버의 3xx·4xx, 너무 큰 그림, API가 받지 않는 그림, 그리고 요금이 나간 실패(끝까지 적지 못함)다.
+     * 요금이 나간 실패는 토큰 수를 남겨 비용과 하루 상한에 센다.
+     * 학교 서버의 5xx·시간 초과, API의 과부하·요청 한도처럼 일시적인 오류는 예외를 그대로 던진다. 요금이 없으니 다음 차례에 다시 한다.
      */
     private ImageTranscriber.Result transcribe(String url) {
-        if (!onSchoolSite(url, props.baseUrl())) {
-            return new ImageTranscriber.Result("", "skipped:host", 0, 0);
+        byte[] bytes;
+        try {
+            bytes = fetcher.getBytes(url);
+        } catch (java.io.UncheckedIOException e) {
+            if (e.getCause() instanceof org.jsoup.HttpStatusException h && h.getStatusCode() >= 300 && h.getStatusCode() < 500) {
+                return new ImageTranscriber.Result("", "skipped:fetch-" + h.getStatusCode(), 0, 0);
+            }
+            throw e;
         }
-        String mediaType = mediaType(url);
-        if (mediaType == null) {
-            return new ImageTranscriber.Result("", "skipped:type", 0, 0);
-        }
-        byte[] bytes = fetcher.getBytes(url);
         if (bytes.length > JsoupPageFetcher.MAX_IMAGE_BYTES) {
             return new ImageTranscriber.Result("", "skipped:size", 0, 0);
         }
         try {
-            return transcriber.transcribe(bytes, mediaType);
-        } catch (RuntimeException e) {
-            log.warn("transcribe {} failed: {}", url, e.getMessage());
-            return new ImageTranscriber.Result("", "failed", 0, 0);
+            return transcriber.transcribe(bytes, mediaType(url));
+        } catch (ImageTranscriber.Rejected e) {
+            log.warn("transcribe {} rejected: {}", url, e.getMessage());
+            return new ImageTranscriber.Result("", "skipped:rejected", 0, 0);
+        } catch (ImageTranscriber.ChargedFailure e) {
+            log.warn("transcribe {} failed after charge: {}", url, e.getMessage());
+            return new ImageTranscriber.Result("", "failed", e.inputTokens(), e.outputTokens());
         }
     }
 

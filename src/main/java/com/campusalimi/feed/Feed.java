@@ -102,12 +102,13 @@ public final class Feed {
             boolean isMine = mine(audience, deadline, viewer);
             Card card = new Card(entry.getKey(), kind(notice), title, notice.getTitle(), notice.getUrl(),
                     AudienceView.of(audience), isMine, line(deadline, title, saved), next);
+            // 취업 공지는 학년이 맞아도 접힌 구간에 둔다. "내게 맞는 공지"와 아침 메일은 장학·학사만 다룬다.
             if (isMust(audience, title)) {
                 must.add(card);
-            } else if (isMine) {
-                mine.add(card);
             } else if ("career".equals(card.kind())) {
                 career.add(card);
+            } else if (isMine) {
+                mine.add(card);
             } else if (Audience.REGION.equals(audience.scope())) {
                 region.add(card);
             } else if (Audience.GROUP.equals(audience.scope()) || Audience.FIELD.equals(audience.scope())) {

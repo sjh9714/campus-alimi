@@ -173,6 +173,15 @@ class FeedTest {
     }
 
     @Test
+    void careerNoticeStaysFoldedEvenWhenTheGradeMatches() {
+        Notice job = notice("취창업", "[대플-추천채용] 2027 신입사원 채용(졸업예정자 및 기졸업자)", "");
+        item(job, "접수 마감", 5);
+
+        Feed.View senior = build(new Feed.Viewer(4, null, null, null));
+        assertThat(senior.sections()).extracting(Feed.Section::key).containsExactly("career");
+    }
+
+    @Test
     void imageOnlyNoticesWaitInAFoldedSectionWithoutADate() {
         Notice poster = notice("학사", "[학사행정팀] 2026-2학기 제1전공생 우선 수강신청 안내", "");
         undated.add(poster);

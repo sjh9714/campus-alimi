@@ -25,7 +25,8 @@ public record GradeTag(List<Integer> grades, String label) {
     private static final Pattern GRADUATING = Pattern.compile("졸업\\s*(?:대상|예정)");
     private static final Pattern FRESHMAN = Pattern.compile("신입생|새내기");
     /** 바로 뒤에 이 말이 오면 그 학년을 빼라는 뜻이다. "졸업예정자 혹은 8학기 이상 재학중인 자는 지원 불가". */
-    private static final Pattern NEGATION = Pattern.compile("^[^.。\\n]{0,30}?(?:불가|제외|안\\s*됨|할\\s*수\\s*없)");
+    /** 학년 표기 바로 뒤의 부정어. 마침표나 여는 괄호에서 멈춘다. "2~4학년 재학생(단, 휴학생 제외)"의 제외는 학년을 지우지 않는다. */
+    private static final Pattern NEGATION = Pattern.compile("^[^.。\\n(（]{0,30}?(?:불가|제외|안\\s*됨|할\\s*수\\s*없)");
 
     public static GradeTag of(String... texts) {
         TreeSet<Integer> grades = new TreeSet<>();

@@ -59,7 +59,13 @@ public class NoticeStore {
                     view.writer(), props.noticeViewUrl(view.articleNo()), view.bodyText(), view.hasImages(),
                     String.join("\n", view.attachments()), reason));
         } else {
-            notice.reparsed(view.title(), view.bodyText(), view.hasImages(), String.join("\n", view.attachments()), reason);
+            boolean changed = notice.reparsed(view.title(), view.bodyText(), view.hasImages(),
+                    String.join("\n", view.attachments()), reason);
+            // 학교가 공지를 고쳤으면(기간 연장 등) 옛 그림에서 읽은 후보를 지운다. 받아 적기가 새 그림으로 다시 읽는다.
+            if (changed) {
+                dateItems.findByNoticeIdOrderByEndsOnAsc(notice.getId()).stream()
+                        .filter(i -> DateItem.STATUS_CANDIDATE.equals(i.getStatus())).forEach(dateItems::delete);
+            }
         }
 
         Set<String> seen = new HashSet<>();

@@ -23,5 +23,8 @@ public interface DateItemRepository extends JpaRepository<DateItem, Long> {
 
     boolean existsByNoticeId(Long noticeId);
 
-    boolean existsByNoticeIdAndStatusNot(Long noticeId, String status);
+    /** 주어진 공지 가운데 status가 아닌 날짜 항목이 하나라도 있는 공지. */
+    @org.springframework.data.jpa.repository.Query("select distinct d.noticeId from DateItem d where d.noticeId in :ids and d.status <> :status")
+    java.util.Set<Long> findNoticeIdsWithItemsNotIn(@org.springframework.data.repository.query.Param("ids") java.util.Collection<Long> ids,
+            @org.springframework.data.repository.query.Param("status") String status);
 }

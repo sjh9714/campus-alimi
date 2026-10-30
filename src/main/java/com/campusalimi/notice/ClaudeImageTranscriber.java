@@ -41,7 +41,24 @@ public class ClaudeImageTranscriber implements ImageTranscriber {
 
     @Override
     public Result transcribe(byte[] image, String mediaType) {
-        Message message = client().messages().create(MessageCreateParams.builder()
+        Message message;
+        try {
+            message = client().messages().create(params(image, mediaType));
+        } catch (com.anthropic.errors.BadRequestException | com.anthropic.errors.UnprocessableEntityException e) {
+            throw new Rejected(e.getMessage(), e);
+        }
+        StopReason stop = message.stopReason().orElse(null);
+        if (!StopReason.END_TURN.equals(stop)) {
+            throw new ChargedFailure("받아 적기가 끝까지 가지 않았습니다: " + stop, message.usage().inputTokens(),
+                    message.usage().outputTokens());
+        }
+        String text = message.content().stream().flatMap(b -> b.text().stream()).map(TextBlock::text)
+                .collect(Collectors.joining());
+        return new Result(text, config.model(), message.usage().inputTokens(), message.usage().outputTokens());
+    }
+
+    private MessageCreateParams params(byte[] image, String mediaType) {
+        return MessageCreateParams.builder()
                 .model(config.model())
                 .maxTokens(8000L)
                 // 글자를 옮기는 일이라 생각할 거리가 없다. 끄면 출력 토큰이 준다.
@@ -54,14 +71,7 @@ public class ClaudeImageTranscriber implements ImageTranscriber {
                                         .build())
                                 .build()),
                         ContentBlockParam.ofText(TextBlockParam.builder().text(PROMPT).build())))
-                .build());
-        StopReason stop = message.stopReason().orElse(null);
-        if (!StopReason.END_TURN.equals(stop)) {
-            throw new IllegalStateException("받아 적기가 끝까지 가지 않았습니다: " + stop);
-        }
-        String text = message.content().stream().flatMap(b -> b.text().stream()).map(TextBlock::text)
-                .collect(Collectors.joining());
-        return new Result(text, config.model(), message.usage().inputTokens(), message.usage().outputTokens());
+                .build();
     }
 
     private synchronized AnthropicClient client() {

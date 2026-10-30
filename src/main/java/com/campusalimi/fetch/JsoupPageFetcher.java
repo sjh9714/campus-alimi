@@ -56,6 +56,12 @@ public class JsoupPageFetcher implements PageFetcher {
                     .followRedirects(false)
                     .maxBodySize(MAX_IMAGE_BYTES + 1)
                     .execute();
+            // 넘기는 응답(3xx)은 따라가지 않으므로 예외 없이 돌아온다. 그림이 아니니 실패로 다룬다.
+            if (response.statusCode() / 100 != 2) {
+                fetchLogs.save(FetchLog.failed("IMAGE", url, "status " + response.statusCode()));
+                throw new UncheckedIOException(new org.jsoup.HttpStatusException("not an image response",
+                        response.statusCode(), url));
+            }
             fetchLogs.save(FetchLog.ok("IMAGE", url, response.statusCode()));
             return response.bodyAsBytes();
         } catch (IOException e) {

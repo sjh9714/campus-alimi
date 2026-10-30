@@ -64,11 +64,16 @@ public class FeedService {
      * 그림에서 읽은 후보 날짜만 있는 공지도 승인 전까지는 여기에 둔다.
      */
     private List<Notice> undated(LocalDate today) {
-        return notices.findByStatusAndReviewReasonAndPostedOnGreaterThanEqual(Notice.STATUS_NEEDS_REVIEW,
+        List<Notice> imageOnly = notices.findByStatusAndReviewReasonAndPostedOnGreaterThanEqual(Notice.STATUS_NEEDS_REVIEW,
                 Notice.REASON_IMAGE_ONLY, today.minusDays(UNDATED_DAYS)).stream()
-                .filter(FeedService::undatedCategory)
-                .filter(n -> !dateItems.existsByNoticeIdAndStatusNot(n.getId(), DateItem.STATUS_CANDIDATE))
-                .toList();
+                .filter(FeedService::undatedCategory).toList();
+        if (imageOnly.isEmpty()) {
+            return imageOnly;
+        }
+        // 공지마다 묻지 않고 한 번에 묻는다. 아침 메일은 사용자마다 피드를 만든다.
+        Set<Long> dated = dateItems.findNoticeIdsWithItemsNotIn(imageOnly.stream().map(Notice::getId).toList(),
+                DateItem.STATUS_CANDIDATE);
+        return imageOnly.stream().filter(n -> !dated.contains(n.getId())).toList();
     }
 
     /** 취업 공지는 기업 포스터가 많아 넣지 않는다. 그림 받아 적기도 같은 공지만 본다 (ADR 010). */

@@ -1,7 +1,6 @@
 package com.campusalimi.api;
 
 import com.campusalimi.domain.DateItem;
-import com.campusalimi.domain.ImageTranscript;
 import com.campusalimi.domain.ImageTranscriptRepository;
 import com.campusalimi.domain.ReviewEvent;
 import com.campusalimi.domain.ReviewEventRepository;
@@ -21,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 공개 품질 페이지의 수치 (ADR 011). 누구나 볼 수 있고 개인 정보는 없다.
  * backtest는 정답셋 백테스트의 마지막 결과다. 백테스트 테스트가 이 파일이 실제 결과와 같은지 확인한다.
  * review와 transcription은 운영 중에 쌓인 검수 기록과 그림 받아 적기 기록을 센 것이다.
+ * 로그인 없이 누구나 부를 수 있어 결과를 1분 동안 재사용한다. 그림 기록은 합계 쿼리로만 센다.
  */
 @RestController
 @RequestMapping("/api")
@@ -34,6 +34,9 @@ public class QualityController {
     private final ImageTranscriptRepository transcripts;
     private final ObjectMapper json;
     private final JsonNode backtest;
+    private volatile Quality cached;
+    private volatile long cachedAt;
+    static final long CACHE_MILLIS = 60_000;
 
     public QualityController(ReviewEventRepository reviewEvents, ImageTranscriptRepository transcripts, ObjectMapper json) {
         this.reviewEvents = reviewEvents;
@@ -64,7 +67,14 @@ public class QualityController {
     @GetMapping("/quality")
     @Transactional(readOnly = true)
     public Quality quality() {
-        return new Quality(backtest, review(), transcription());
+        long now = System.currentTimeMillis();
+        Quality q = cached;
+        if (q == null || now - cachedAt > CACHE_MILLIS) {
+            q = new Quality(backtest, review(), transcription());
+            cached = q;
+            cachedAt = now;
+        }
+        return q;
     }
 
     private Review review() {
@@ -117,20 +127,9 @@ public class QualityController {
     }
 
     private Transcription transcription() {
-        int images = 0;
-        int skipped = 0;
-        long in = 0;
-        long out = 0;
-        for (ImageTranscript t : transcripts.findAll()) {
-            if (t.getInputTokens() == 0 && t.getOutputTokens() == 0) {
-                skipped++;
-                continue;
-            }
-            images++;
-            in += t.getInputTokens();
-            out += t.getOutputTokens();
-        }
-        double cost = in / 1e6 * PRICE_IN + out / 1e6 * PRICE_OUT;
-        return new Transcription(images, skipped, in, out, Math.round(cost * 10000) / 10000.0);
+        ImageTranscriptRepository.Usage u = transcripts.usage();
+        double cost = u.getInputTokens() / 1e6 * PRICE_IN + u.getOutputTokens() / 1e6 * PRICE_OUT;
+        return new Transcription((int) u.getImages(), (int) transcripts.countByInputTokens(0), u.getInputTokens(),
+                u.getOutputTokens(), Math.round(cost * 10000) / 10000.0);
     }
 }

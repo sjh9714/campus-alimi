@@ -100,6 +100,8 @@ class AudienceTest {
         assertThat(GradeTag.of("AI·ICT 분야 전공 대학교(학부) 2학년 이상 재학생").label()).isEqualTo("2~4학년");
         assertThat(GradeTag.of("2026년도 국내 정규대학교 신입생").label()).isEqualTo("1학년");
         assertThat(GradeTag.of("신입생 제외")).isEqualTo(GradeTag.NONE);
+        // 괄호 속 단서는 앞의 학년을 지우지 않는다.
+        assertThat(GradeTag.of("2~4학년 재학생(단, 휴학생 제외)").label()).isEqualTo("2~4학년");
     }
 
     @Test

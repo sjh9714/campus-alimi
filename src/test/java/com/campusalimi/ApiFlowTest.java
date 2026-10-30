@@ -71,8 +71,12 @@ class ApiFlowTest {
 
                 @Override
                 public byte[] getBytes(String url) {
+                    // 학교 서버에서 사라진 그림. 404는 다시 받아도 소용없다.
+                    if (url.contains("/gone-")) {
+                        throw new java.io.UncheckedIOException(new org.jsoup.HttpStatusException("not found", 404, url));
+                    }
                     // 받아 적기 테스트용 공지의 그림만 1로 표시한다. 다른 공지에는 날짜가 생기지 않게.
-                    return new byte[] { (byte) (url.contains("/copy-") ? 1 : 0) };
+                    return new byte[] { (byte) (url.contains("/copy") ? 1 : 0) };
                 }
             };
         }
@@ -324,6 +328,28 @@ class ApiFlowTest {
         int calls = transcriber.calls;
         imageReader.readPending(LocalDate.of(2026, 7, 10));
         assertThat(transcriber.calls).isEqualTo(calls);
+
+        // 학교가 공지를 고치면(기간 연장) 옛 후보를 지우고 다시 읽는다. 바뀌지 않은 그림은 캐시에서 읽어 비용이 없다.
+        store.save(new NoticeSummary(999001L, "장학", "", LocalDate.of(2026, 7, 27)),
+                Fixtures.read("notice-274128.html").replace("274128", "999001").replace("editor-image/", "editor-image/copy-")
+                        .replace("[학사지원팀] 2026-2학기 제1전공생 우선 수강신청 시행 안내", "[학생지원팀] 테스트 장학생 선발 안내(기간 연장)"));
+        assertThat(dateItems.findByNoticeIdOrderByEndsOnAsc(noticeId)).isEmpty();
+        imageReader.readPending(LocalDate.of(2026, 7, 10));
+        assertThat(transcriber.calls).isEqualTo(calls);
+        items = dateItems.findByNoticeIdOrderByEndsOnAsc(noticeId);
+        assertThat(items).singleElement().satisfies(i -> assertThat(i.getStatus()).isEqualTo(DateItem.STATUS_CANDIDATE));
+        itemId = items.get(0).getId();
+
+        // 그림 한 장이 사라져도(404) 나머지 그림의 날짜는 후보로 올라간다. 사라진 그림은 기록해 두고 다시 받지 않는다.
+        store.save(new NoticeSummary(999002L, "장학", "", LocalDate.of(2026, 7, 27)),
+                Fixtures.read("notice-274128.html").replace("274128", "999002")
+                        .replace("editor-image/2026/07/kDetn", "editor-image/gone-kDetn")
+                        .replace("editor-image/2026/07/IXli", "editor-image/copy2-IXli")
+                        .replace("[학사지원팀] 2026-2학기 제1전공생 우선 수강신청 시행 안내", "[학생지원팀] 그림 하나가 사라진 장학 안내"));
+        long brokenId = notices.findByArticleNo(999002L).orElseThrow().getId();
+        imageReader.readPending(LocalDate.of(2026, 7, 10));
+        assertThat(dateItems.findByNoticeIdOrderByEndsOnAsc(brokenId)).hasSize(1);
+        assertThat(transcripts.findAll()).anyMatch(t -> t.getImageUrl().contains("/gone-") && t.getModel().startsWith("skipped"));
 
         // 검수 화면에서는 그림에서 읽은 후보로 보이고, 공지를 검수 완료로 두면 학생에게 나간다.
         String cookie = login("admin@catholic.ac.kr");
