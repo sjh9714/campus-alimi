@@ -1,0 +1,182 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { api, type BacktestScore, type Quality } from "@/lib/api";
+
+const ADR_URL = "https://github.com/sjh9714/campus-alimi/blob/main/docs/decisions/011-extraction-quality.md";
+
+const percent = (v: number) => `${(v * 100).toFixed(1)}%`;
+
+function ScoreRow({ label, s }: { label: string; s: BacktestScore }) {
+  return (
+    <tr>
+      <th scope="row">{label}</th>
+      <td>{s.notices}건</td>
+      <td>{percent(s.precision)}</td>
+      <td>{percent(s.recall)}</td>
+      <td>
+        {s.exactNotices}/{s.notices}건
+      </td>
+    </tr>
+  );
+}
+
+/** 마감을 얼마나 맞게 뽑는지 공개한다. 정답셋 백테스트는 코드와 함께 바뀌고, 운영 수치는 검수 기록에서 센다. */
+export default function QualityPage() {
+  const [q, setQ] = useState<Quality | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    api
+      .quality()
+      .then(setQ)
+      .catch(() => setFailed(true));
+  }, []);
+
+  return (
+    <main id="main" className="narrow prose">
+      <div className="page-head">
+        <h1>마감 정확도</h1>
+        <p className="sub">
+          공지에서 마감을 얼마나 맞게 뽑는지 숫자로 공개해요. 날짜가 틀리면 그 날짜를 믿고 신청을 놓칠 수 있어서요.
+        </p>
+      </div>
+
+      {failed && (
+        <p className="panel" role="alert">
+          수치를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.
+        </p>
+      )}
+      {!q && !failed && (
+        <p className="panel muted" role="status">
+          불러오는 중…
+        </p>
+      )}
+
+      {q && (
+        <>
+          <section className="panel">
+            <h2>정답셋으로 잰 정확도</h2>
+            <p>
+              공지 {q.backtest.notices}건에 학생이 할 일의 마감 {q.backtest.deadlines}개를 정답으로 붙여 두고, 코드가 바뀔
+              때마다 같은 공지에서 다시 뽑아 비교해요. 수치가 떨어지면 바뀐 코드는 반영되지 않아요. 마지막으로 잰 날은{" "}
+              <span style={{ whiteSpace: "nowrap" }}>{q.backtest.measuredOn}</span>이에요.
+            </p>
+            <table className="facts">
+              <thead>
+                <tr>
+                  <th scope="col">공지</th>
+                  <th scope="col">수</th>
+                  <th scope="col">정밀도</th>
+                  <th scope="col">재현율</th>
+                  <th scope="col">모두 맞은 공지</th>
+                </tr>
+              </thead>
+              <tbody>
+                <ScoreRow label="전체" s={q.backtest.all} />
+                <ScoreRow label="글 공지" s={q.backtest.text} />
+                <ScoreRow label="그림 공지" s={q.backtest.image} />
+              </tbody>
+            </table>
+            <p className="muted">
+              정밀도는 보여 준 마감 가운데 맞은 비율, 재현율은 있어야 할 마감 가운데 찾아낸 비율이에요. 정답은 뽑은 결과를
+              보지 않고 공지 원문만 읽어 붙였어요. 그림 공지는 규칙을 고칠 때 함께 본 공지라 실제보다 높게 나올 수 있어요.
+            </p>
+          </section>
+
+          <section className="panel">
+            <h2>아직 못 고친 오류</h2>
+            {q.backtest.remaining.length === 0 ? (
+              <p>정답셋에서 남은 오류가 없어요.</p>
+            ) : (
+              <ul>
+                {q.backtest.remaining.map((r) => (
+                  <li key={r.type}>
+                    {r.description}
+                    {r.missed > 0 && ` (놓친 마감 ${r.missed}개)`}
+                    {r.invented > 0 && ` (없는 마감 ${r.invented}개)`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2>운영 중 검수</h2>
+            {q.review.judged + q.review.added === 0 ? (
+              <p>
+                아직 검수 기록이 없어요. 운영을 시작하면 자동으로 뽑은 날짜를 운영자가 그대로 승인했는지, 고쳤는지,
+                지웠는지가 여기 쌓여요.
+              </p>
+            ) : (
+              <table className="facts">
+                <tbody>
+                  <tr>
+                    <th scope="row">운영자가 확인한 자동 날짜</th>
+                    <td>{q.review.judged}개</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">그대로 승인</th>
+                    <td>
+                      {q.review.approvedAsIs}개
+                      {q.review.judged > 0 && ` (${percent(q.review.approvedAsIs / q.review.judged)})`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">고침</th>
+                    <td>{q.review.edited}개</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">지움 (없는 마감)</th>
+                    <td>{q.review.deleted}개</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">손으로 추가 (놓친 마감)</th>
+                    <td>{q.review.added}개</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">그 가운데 그림에서 읽은 날짜</th>
+                    <td>
+                      {q.review.fromImageApprovedAsIs}/{q.review.fromImageJudged}개 그대로 승인
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2>그림 공지 받아 적기</h2>
+            <p>
+              본문이 그림뿐인 공지는 AI(Claude Haiku)가 그림 속 글자를 그대로 받아 적고, 날짜는 글 공지와 같은 규칙이
+              뽑아요. 그렇게 뽑은 날짜는 운영자가 원문 그림과 맞춰 본 뒤에야 보여요.
+            </p>
+            <table className="facts">
+              <tbody>
+                <tr>
+                  <th scope="row">받아 적은 그림</th>
+                  <td>{q.transcription.images}장</td>
+                </tr>
+                <tr>
+                  <th scope="row">건너뛰거나 실패한 그림</th>
+                  <td>{q.transcription.skipped}장</td>
+                </tr>
+                <tr>
+                  <th scope="row">든 비용</th>
+                  <td>${q.transcription.costUsd.toFixed(4)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <p className="muted">
+            재는 방법과 이유는{" "}
+            <a href={ADR_URL} target="_blank" rel="noreferrer">
+              결정 기록
+            </a>
+            에 있어요.
+          </p>
+        </>
+      )}
+    </main>
+  );
+}

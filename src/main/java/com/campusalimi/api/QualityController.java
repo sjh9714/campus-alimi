@@ -1,0 +1,136 @@
+package com.campusalimi.api;
+
+import com.campusalimi.domain.DateItem;
+import com.campusalimi.domain.ImageTranscript;
+import com.campusalimi.domain.ImageTranscriptRepository;
+import com.campusalimi.domain.ReviewEvent;
+import com.campusalimi.domain.ReviewEventRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.util.HashSet;
+import java.util.Set;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 공개 품질 페이지의 수치 (ADR 011). 누구나 볼 수 있고 개인 정보는 없다.
+ * backtest는 정답셋 백테스트의 마지막 결과다. 백테스트 테스트가 이 파일이 실제 결과와 같은지 확인한다.
+ * review와 transcription은 운영 중에 쌓인 검수 기록과 그림 받아 적기 기록을 센 것이다.
+ */
+@RestController
+@RequestMapping("/api")
+public class QualityController {
+
+    /** claude-haiku-5-5 단가, 달러 / 100만 토큰 (2026-10 기준). */
+    static final double PRICE_IN = 0.10;
+    static final double PRICE_OUT = 0.50;
+
+    private final ReviewEventRepository reviewEvents;
+    private final ImageTranscriptRepository transcripts;
+    private final ObjectMapper json;
+    private final JsonNode backtest;
+
+    public QualityController(ReviewEventRepository reviewEvents, ImageTranscriptRepository transcripts, ObjectMapper json) {
+        this.reviewEvents = reviewEvents;
+        this.transcripts = transcripts;
+        this.json = json;
+        try (InputStream in = getClass().getResourceAsStream("/quality/extraction.json")) {
+            this.backtest = json.readTree(in);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * 자동으로 뽑은 항목에 운영자가 내린 첫 판단. 그대로 승인, 고침, 지움으로 나눈다. added는 자동 추출이 놓쳐 손으로 넣은 항목이다.
+     * fromImage는 그 가운데 그림에서 읽은 후보만 센 것이다.
+     */
+    public record Review(int judged, int approvedAsIs, int edited, int deleted, int added, int fromImageJudged,
+            int fromImageApprovedAsIs, int noticesReviewed) {
+    }
+
+    /** images는 받아 적은 그림 수, skipped는 형식·크기·주소 때문에 건너뛰었거나 실패한 수. */
+    public record Transcription(int images, int skipped, long inputTokens, long outputTokens, double costUsd) {
+    }
+
+    public record Quality(JsonNode backtest, Review review, Transcription transcription) {
+    }
+
+    @GetMapping("/quality")
+    @Transactional(readOnly = true)
+    public Quality quality() {
+        return new Quality(backtest, review(), transcription());
+    }
+
+    private Review review() {
+        int approved = 0;
+        int edited = 0;
+        int deleted = 0;
+        int added = 0;
+        int imageJudged = 0;
+        int imageApproved = 0;
+        Set<Long> judgedItems = new HashSet<>();
+        Set<Long> reviewedNotices = new HashSet<>();
+        for (ReviewEvent e : reviewEvents.findAll(org.springframework.data.domain.Sort.by("id"))) {
+            if (e.getDateItemId() == null) {
+                reviewedNotices.add(e.getNoticeId());
+                continue;
+            }
+            if (ReviewEvent.ADD.equals(e.getAction())) {
+                added++;
+                continue;
+            }
+            String before = beforeStatus(e);
+            boolean automatic = DateItem.STATUS_AUTO.equals(before) || DateItem.STATUS_CANDIDATE.equals(before);
+            // 자동 항목마다 첫 판단만 센다. 사람이 고친 뒤의 수정은 추출 정확도와 상관없다.
+            if (!automatic || !judgedItems.add(e.getDateItemId())) {
+                continue;
+            }
+            boolean image = DateItem.STATUS_CANDIDATE.equals(before);
+            switch (e.getAction()) {
+                case ReviewEvent.APPROVE -> {
+                    approved++;
+                    imageApproved += image ? 1 : 0;
+                }
+                case ReviewEvent.EDIT -> edited++;
+                case ReviewEvent.DELETE -> deleted++;
+                default -> {
+                }
+            }
+            imageJudged += image ? 1 : 0;
+        }
+        return new Review(approved + edited + deleted, approved, edited, deleted, added, imageJudged, imageApproved,
+                reviewedNotices.size());
+    }
+
+    private String beforeStatus(ReviewEvent e) {
+        try {
+            return e.getBeforeJson() == null ? null : json.readTree(e.getBeforeJson()).path("status").asText(null);
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
+    private Transcription transcription() {
+        int images = 0;
+        int skipped = 0;
+        long in = 0;
+        long out = 0;
+        for (ImageTranscript t : transcripts.findAll()) {
+            if (t.getInputTokens() == 0 && t.getOutputTokens() == 0) {
+                skipped++;
+                continue;
+            }
+            images++;
+            in += t.getInputTokens();
+            out += t.getOutputTokens();
+        }
+        double cost = in / 1e6 * PRICE_IN + out / 1e6 * PRICE_OUT;
+        return new Transcription(images, skipped, in, out, Math.round(cost * 10000) / 10000.0);
+    }
+}

@@ -129,6 +129,40 @@ export type ReviewQueue = {
 
 export type FeedbackEntry = { id: number; message: string; createdAt: string };
 
+export type BacktestScore = {
+  notices: number;
+  exactNotices: number;
+  truePositive: number;
+  falsePositive: number;
+  falseNegative: number;
+  precision: number;
+  recall: number;
+};
+
+/** 공개 품질 페이지 수치 (ADR 011). */
+export type Quality = {
+  backtest: {
+    measuredOn: string;
+    notices: number;
+    deadlines: number;
+    all: BacktestScore;
+    text: BacktestScore;
+    image: BacktestScore;
+    remaining: { type: string; description: string; missed: number; invented: number }[];
+  };
+  review: {
+    judged: number;
+    approvedAsIs: number;
+    edited: number;
+    deleted: number;
+    added: number;
+    fromImageJudged: number;
+    fromImageApprovedAsIs: number;
+    noticesReviewed: number;
+  };
+  transcription: { images: number; skipped: number; inputTokens: number; outputTokens: number; costUsd: number };
+};
+
 export type ItemEdit = {
   title: string;
   startsOn: string | null;
@@ -193,6 +227,7 @@ export const api = {
   leaveFeedback: (message: string) => call<void>("POST", "/api/feedback", { message }),
   feedback: () => call<FeedbackEntry[]>("GET", "/api/admin/feedback"),
   meta: () => call<{ contactEmail: string }>("GET", "/api/meta"),
+  quality: () => call<Quality>("GET", "/api/quality"),
   updateProfile: (p: { entryYear: number | null; major: string; secondMajor: string; homeRegion: string }) =>
     call<Me>("PUT", "/api/me/profile", p),
   save: (id: number) => call<void>("POST", `/api/me/saved/${id}`),

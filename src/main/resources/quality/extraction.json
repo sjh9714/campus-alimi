@@ -1,0 +1,43 @@
+{
+  "measuredOn" : "2026-10-30",
+  "notices" : 89,
+  "deadlines" : 86,
+  "all" : {
+    "notices" : 89,
+    "exactNotices" : 86,
+    "truePositive" : 84,
+    "falsePositive" : 2,
+    "falseNegative" : 2,
+    "precision" : 0.977,
+    "recall" : 0.977
+  },
+  "text" : {
+    "notices" : 71,
+    "exactNotices" : 68,
+    "truePositive" : 72,
+    "falsePositive" : 2,
+    "falseNegative" : 2,
+    "precision" : 0.973,
+    "recall" : 0.973
+  },
+  "image" : {
+    "notices" : 18,
+    "exactNotices" : 18,
+    "truePositive" : 12,
+    "falsePositive" : 0,
+    "falseNegative" : 0,
+    "precision" : 1.0,
+    "recall" : 1.0
+  },
+  "remaining" : [ {
+    "type" : "event-period",
+    "description" : "특강 일정표의 '일정' 칸 날짜를 마감으로 읽어요",
+    "missed" : 0,
+    "invented" : 2
+  }, {
+    "type" : "sentence-deadline",
+    "description" : "문장 속 '~까지 보내 주세요' 같은 마감을 읽지 못해요",
+    "missed" : 2,
+    "invented" : 0
+  } ]
+}

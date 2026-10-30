@@ -148,6 +148,12 @@ class ApiFlowTest {
         assertThat(items.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(items.getBody()).hasSizeGreaterThanOrEqualTo(8);
 
+        // 품질 수치는 로그인 없이 공개한다.
+        Map quality = rest.getForObject("/api/quality", Map.class);
+        assertThat(((Number) ((Map) ((Map) quality.get("backtest")).get("all")).get("precision")).doubleValue()).isGreaterThan(0.9);
+        assertThat(quality.get("review")).isNotNull();
+        assertThat(quality.get("transcription")).isNotNull();
+
         ResponseEntity<List> benefits = rest.getForEntity("/api/benefits", List.class);
         assertThat(benefits.getBody()).hasSizeGreaterThanOrEqualTo(15);
 

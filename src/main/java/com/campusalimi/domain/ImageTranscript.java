@@ -43,4 +43,16 @@ public class ImageTranscript {
     public String getText() {
         return text;
     }
+
+    public String getModel() {
+        return model;
+    }
+
+    public long getInputTokens() {
+        return inputTokens;
+    }
+
+    public long getOutputTokens() {
+        return outputTokens;
+    }
 }

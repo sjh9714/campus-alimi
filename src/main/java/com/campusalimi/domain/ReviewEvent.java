@@ -63,4 +63,8 @@ public class ReviewEvent {
     public String getAfterJson() {
         return afterJson;
     }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
 }

@@ -28,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <footer className="site-footer">
           <a href="/privacy/">개인정보 처리방침</a>
+          <a href="/quality/">마감 정확도</a>
           <span>학교 공지는 가톨릭대학교 홈페이지의 공개 글을 옮긴 것이며, 이 서비스는 학교와 관계가 없어요.</span>
         </footer>
       </body>
